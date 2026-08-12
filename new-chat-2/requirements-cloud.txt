@@ -1,4 +1,4 @@
 httpx==0.28.1
-pandas==2.2.3
-akshare==1.17.45
+pandas==2.3.3
+akshare==1.18.83
 pytdx==1.72
