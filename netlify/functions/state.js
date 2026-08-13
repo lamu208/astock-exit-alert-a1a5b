@@ -81,8 +81,8 @@ function eastmoneySecIds(symbol) {
 function parseEastmoneyQuote(payload) {
   const data = payload?.data;
   if (!data?.f57 || !Number.isFinite(Number(data.f43))) return null;
-  const price = Number(data.f43) / 1000;
-  const previous = Number(data.f60) / 1000;
+  const price = Number(data.f43) / 100;
+  const previous = Number(data.f60) / 100;
   return {
     symbol: exchangeSymbol(data.f57),
     name: data.f58 || data.f57,
@@ -90,9 +90,9 @@ function parseEastmoneyQuote(payload) {
     prev_close: previous || price,
     volume: Number(data.f47) || 0,
     amount: Number(data.f48) || 0,
-    open: Number(data.f46) / 1000 || price,
-    high: Number(data.f44) / 1000 || price,
-    low: Number(data.f45) / 1000 || price,
+    open: Number(data.f46) / 100 || price,
+    high: Number(data.f44) / 100 || price,
+    low: Number(data.f45) / 100 || price,
     change_pct: Number(data.f170) / 100 || 0,
     source: "东方财富公开行情",
     timestamp: new Date().toISOString(),
@@ -139,11 +139,12 @@ async function resolveItem(item) {
   if (code) return { ...item, symbol: exchangeSymbol(code) };
   const name = String(item.name || item.symbol || "").replace(/^NAME:/, "").trim();
   if (!name) return item;
+  const normalizedName = name === "美丽云" ? "美利云" : name;
   try {
-    const raw = await readText(`https://smartbox.gtimg.cn/s3/?q=${encodeURIComponent(name)}&t=all`);
-    return { ...item, ...(parseSearchHints(raw)[0] || {}), name };
+    const raw = await readText(`https://smartbox.gtimg.cn/s3/?q=${encodeURIComponent(normalizedName)}&t=all`);
+    return { ...item, ...(parseSearchHints(raw)[0] || {}), name: normalizedName };
   } catch {
-    return { ...item, symbol: `NAME:${name}`, name };
+    return { ...item, symbol: `NAME:${normalizedName}`, name: normalizedName };
   }
 }
 
