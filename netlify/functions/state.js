@@ -34,6 +34,11 @@ function vendorKey(symbol) {
   return `${marketOf(code).toLowerCase()}${code}`;
 }
 
+function quoteScale(code, name = "") {
+  const fundCode = /^(15|16|50|51|52|56|58|59)\d{4}$/.test(code);
+  return fundCode || /ETF|LOF|基金/i.test(name) ? 1000 : 100;
+}
+
 async function readText(url) {
   const response = await fetch(url, { headers: { "user-agent": "A-share-exit-alert/1.0" } });
   if (!response.ok) throw new Error(`行情接口 HTTP ${response.status}`);
@@ -49,18 +54,19 @@ function parseQuote(raw) {
     const values = line.slice(separator + 1).trim().replace(/^"|";?$/g, "").split("~");
     if (values.length < 39) continue;
     const code = digits(values[2]);
-    const price = Number(values[3]);
+    const price = Number(values[3]) / quoteScale(code, values[1]);
     if (!code || !Number.isFinite(price) || price <= 0) continue;
+    const scale = quoteScale(code, values[1]);
     result[code] = {
       symbol: exchangeSymbol(code),
       name: values[1] || code,
       price,
-      prev_close: Number(values[4]) || price,
+      prev_close: Number(values[4]) / scale || price,
       volume: Number(values[36]) || 0,
       amount: Number(values[37]) || 0,
-      open: Number(values[5]) || price,
-      high: Number(values[33]) || price,
-      low: Number(values[34]) || price,
+      open: Number(values[5]) / scale || price,
+      high: Number(values[33]) / scale || price,
+      low: Number(values[34]) / scale || price,
       change_pct: Number(values[32]) || 0,
       source: "腾讯公开行情",
       timestamp: new Date().toISOString(),
@@ -81,8 +87,9 @@ function eastmoneySecIds(symbol) {
 function parseEastmoneyQuote(payload) {
   const data = payload?.data;
   if (!data?.f57 || !Number.isFinite(Number(data.f43))) return null;
-  const price = Number(data.f43) / 100;
-  const previous = Number(data.f60) / 100;
+  const scale = quoteScale(String(data.f57), data.f58 || "");
+  const price = Number(data.f43) / scale;
+  const previous = Number(data.f60) / scale;
   return {
     symbol: exchangeSymbol(data.f57),
     name: data.f58 || data.f57,
@@ -90,9 +97,9 @@ function parseEastmoneyQuote(payload) {
     prev_close: previous || price,
     volume: Number(data.f47) || 0,
     amount: Number(data.f48) || 0,
-    open: Number(data.f46) / 100 || price,
-    high: Number(data.f44) / 100 || price,
-    low: Number(data.f45) / 100 || price,
+    open: Number(data.f46) / scale || price,
+    high: Number(data.f44) / scale || price,
+    low: Number(data.f45) / scale || price,
     change_pct: Number(data.f170) / 100 || 0,
     source: "东方财富公开行情",
     timestamp: new Date().toISOString(),
