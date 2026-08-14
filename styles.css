@@ -51,3 +51,8 @@
   .stock-quote em{font-size:13px}
   .stock-source{text-align:left;font-size:10px}
 }
+
+.alert-banner.add{background:#f5efff;color:#7138d6}
+.alert-banner.warning{background:#fff8e8;color:#c47b00}
+.alert-banner.reduce{background:#fff3e5;color:#e27609}
+.alert-banner.clear{background:#fff0f1;color:#d91f29}

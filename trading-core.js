@@ -587,7 +587,7 @@
   }
 
   function shouldAnnounce(cache, symbol, signal, now = Date.now(), cooldownMs = 300000) {
-    if (!signal || !['clear', 'reduce', 'warning'].includes(signal.tone)) return false;
+    if (!signal || !['clear', 'reduce', 'warning', 'add'].includes(signal.tone)) return false;
     const key = `${symbol}|${signal.action}|${signal.ruleId}`;
     const previous = cache.get(key);
     if (!previous || now - previous.timestamp >= cooldownMs || signal.priority > previous.priority) {

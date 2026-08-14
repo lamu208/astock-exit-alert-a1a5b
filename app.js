@@ -1,4 +1,5 @@
 const core = window.TradingCore;
+const directMarket = window.DirectMarket;
 const state = {
   payload: null,
   stocks: [],
@@ -16,6 +17,7 @@ const WATCHLIST_KEY = 'a-share-exit-watchlist';
 const API_META = document.querySelector('meta[name="market-api-base"]')?.content || '';
 const API_BASE = location.hostname.endsWith('.netlify.app') ? '' : API_META;
 const API_URL = `${API_BASE}/api/state`;
+const PREFER_DIRECT = location.hostname.endsWith('.github.io') || ['127.0.0.1', 'localhost'].includes(location.hostname);
 const $ = (selector) => document.querySelector(selector);
 
 function escapeHtml(value) {
@@ -62,6 +64,11 @@ function formatNumber(value) {
 function formatPrice(value, digits = 2) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number.toFixed(digits) : '—';
+}
+
+function formatSignedPrice(value, digits = 2) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number > 0 ? '+' : ''}${number.toFixed(digits)}` : '—';
 }
 
 function formatRatio(value) {
@@ -190,7 +197,7 @@ function stockCard(stock) {
     <article class="stock-card tone-${escapeHtml(signal.tone)}" data-key="${escapeHtml(stockKey(stock))}" tabindex="0">
       <button class="stock-remove" type="button" data-remove="${escapeHtml(stockKey(stock))}" aria-label="移除${escapeHtml(stock.name)}">×</button>
       <div class="stock-card-title"><strong>${escapeHtml(stock.name || codeOf(stock.symbol) || '未知标的')}</strong><span>${escapeHtml(codeOf(stock.symbol) || stock.symbol || '')}</span></div>
-      <div class="stock-quote ${trendClass(change)}"><strong>${formatPrice(quote.price, digits)}</strong><span>${formatPercent(change)}</span><em>${Number.isFinite(change) ? `${change >= 0 ? '+' : ''}${formatPrice(Number(quote.price) - Number(quote.previous_close), digits)}` : '—'}</em></div>
+      <div class="stock-quote ${trendClass(change)}"><strong>${formatPrice(quote.price, digits)}</strong><span>${formatPercent(change)}</span><em>${Number.isFinite(change) ? formatSignedPrice(Number(quote.price) - Number(quote.previous_close), digits) : '—'}</em></div>
       <button class="stock-action ${escapeHtml(signal.tone)}" type="button">${escapeHtml(signalLabel(signal))}</button>
       <div class="stock-metrics">${metrics}</div>
       <div class="stock-reason-row ${escapeHtml(signal.tone)}"><span><i>i</i><b>${escapeHtml(summary.title)}</b><em>${escapeHtml(summary.reason)}</em></span><strong>${escapeHtml(summary.side)}</strong></div>
@@ -299,6 +306,29 @@ async function fetchWithTimeout(url, timeoutMs = 18000) {
   }
 }
 
+async function fetchPayload(watchlist) {
+  const query = encodeURIComponent(JSON.stringify(watchlist));
+  let apiError;
+  if (PREFER_DIRECT && directMarket?.fetchState) {
+    try {
+      const payload = await directMarket.fetchState(watchlist);
+      if (Array.isArray(payload.stocks) && payload.status !== 'disconnected') return payload;
+    } catch {}
+  }
+  try {
+    const payload = await fetchWithTimeout(`${API_URL}?watchlist=${query}&_=${Date.now()}`, 4500);
+    if (!Array.isArray(payload.stocks)) throw new Error(payload.error || '云端返回格式无效');
+    return payload;
+  } catch (error) {
+    apiError = error;
+  }
+  if (!directMarket?.fetchState) throw apiError;
+  const payload = await directMarket.fetchState(watchlist);
+  if (!Array.isArray(payload.stocks)) throw apiError;
+  payload.gateway_warning = '云函数不可用，已自动切换浏览器直连行情';
+  return payload;
+}
+
 async function refresh() {
   if (state.refreshing || state.paused) return;
   state.refreshing = true;
@@ -306,9 +336,7 @@ async function refresh() {
   renderHeader();
   const watchlist = loadWatchlist();
   try {
-    const query = encodeURIComponent(JSON.stringify(watchlist));
-    const payload = await fetchWithTimeout(`${API_URL}?watchlist=${query}&_=${Date.now()}`);
-    if (!Array.isArray(payload.stocks)) throw new Error(payload.error || '云端返回格式无效');
+    const payload = await fetchPayload(watchlist);
     state.payload = payload;
     state.lastSuccess = payload.generated_at || new Date().toISOString();
     evaluatePayload(payload);
