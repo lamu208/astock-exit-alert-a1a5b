@@ -52,19 +52,37 @@ function resolveStockName(name) {
 }
 function directRule(level, title, reason, action, priority) { return { level, title, reason, action, priority }; }
 function directEvaluate(quote) {
-  const rules = []; const close = number(quote.price); const open = number(quote.open); const high = number(quote.high); const low = number(quote.low);
-  const ratio = number(quote.volume_ratio); const volumeHit = ratio >= 1.3; const shrink = ratio > 0 && ratio < 1;
-  const body = Math.abs(close - open); const range = Math.max(.0001, high - low); const upper = Math.max(0, high - Math.max(open, close));
-  const upperShadow = upper >= Math.max(body * 2, range * .35); const extremeUpper = upper >= Math.max(body * 3, range * .6);
-  const ma5 = number(quote.ma5); const ma10 = number(quote.ma10); const ma20 = number(quote.ma20); const change = changeOf(quote);
-  if (extremeUpper) rules.push(directRule('red', '极端长上影', '出现极端长上影线，严格按纪律立即清仓', 'clear', 100));
-  else if (upperShadow && volumeHit) rules.push(directRule('orange', '放量长上影', '放量出现长上影，按纪律减仓50%-60%', 'reduce_50_60', 80));
-  if (ma20 && close < ma20) rules.push(volumeHit ? directRule('orange', '放量跌破MA20', `最新价${close.toFixed(3)}跌破MA20 ${ma20.toFixed(3)}，减仓30%-50%`, 'reduce_30_50', 70) : directRule('blue', '缩量跌破MA20', '缩量跌破MA20，先观察，不直接清仓', 'hold_no_sell', 20));
-  else if (ma10 && close < ma10) rules.push(directRule(volumeHit ? 'orange' : 'blue', '跌破MA10', volumeHit ? '放量跌破MA10，进入警示观察' : '缩量跌破MA10，暂不动作', 'warning', volumeHit ? 50 : 25));
-  if (ma5 && close < ma5) rules.push(volumeHit ? directRule('orange', '放量破MA5', `最新价${close.toFixed(3)}跌破MA5 ${ma5.toFixed(3)}且未收回，止损减仓`, 'stop_loss', 55) : directRule('blue', '缩量破MA5', `最新价${close.toFixed(3)}跌破MA5 ${ma5.toFixed(3)}，仅观察，不卖`, 'hold_no_sell', 20));
-  if (change > .003 && volumeHit && ma5 > ma10 && ma10 > ma20) rules.push(directRule('blue', '上涨放量', `量比${ratio.toFixed(2)}，多头排列，趋势确认，可按计划加仓`, 'add', 30));
-  else if (change > .003 && shrink) rules.push(directRule('blue', '上涨缩量', '上涨缩量，可持有，不追高', 'hold', 10));
-  else if (change < -.003 && shrink) rules.push(directRule('blue', '下跌缩量', '下跌缩量，属于正常回踩，观察支撑', 'hold', 12));
+  const rules = []; const bars = Array.isArray(quote.recent_bars) ? quote.recent_bars : []; const prior = bars.slice(0, -1); const closes = bars.map((bar) => number(bar.close)).filter(Boolean);
+  const close = number(quote.price); const open = number(quote.open); const high = number(quote.high); const low = number(quote.low); const change = changeOf(quote);
+  const ratio = number(quote.volume_ratio); const volumeHit = ratio >= 1.3; const shrink = ratio > 0 && ratio < 1; const bullishVolume = ratio >= 1.3 && ratio <= 1.8;
+  const ma5 = number(quote.ma5); const ma10 = number(quote.ma10); const ma20 = number(quote.ma20); const bullishAlignment = ma5 > ma10 && ma10 > ma20 && ma20 > 0;
+  const body = Math.abs(close - open); const range = Math.max(.0001, high - low); const upper = Math.max(0, high - Math.max(open, close)); const lower = Math.max(0, Math.min(open, close) - low);
+  const hammer = lower >= Math.max(body * 2, range * .35) && upper <= Math.max(body, range * .2); const upperShadow = upper >= Math.max(body * 2, range * .35); const hugeUpperShadow = upper >= Math.max(body * 3, range * .55) && ratio >= 1.8;
+  const previous = prior.at(-1); const previousTwo = prior.slice(-2); const previousHigh20 = Math.max(...prior.slice(-20).map((bar) => number(bar.high)), 0); const previousHigh = Math.max(...prior.slice(-5).map((bar) => number(bar.high)), 0);
+  const engulfing = Boolean(previous && number(previous.close) < number(previous.open) && close > open && close >= number(previous.open) && open <= number(previous.close));
+  const morningStar = previousTwo.length === 2 && number(previousTwo[0].close) < number(previousTwo[0].open) && Math.abs(number(previousTwo[1].close) - number(previousTwo[1].open)) <= Math.abs(number(previousTwo[0].close) - number(previousTwo[0].open)) * .5 && close > open && close > (number(previousTwo[0].open) + number(previousTwo[0].close)) / 2;
+  const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0; const priorMa5 = average(closes.slice(-6, -1)); const priorMa10 = average(closes.slice(-11, -1));
+  const ma5Sequence = [average(closes.slice(-7, -2)), priorMa5, ma5]; const ma5Weakening = ma5Sequence.every(Boolean) && ma5Sequence[0] > ma5Sequence[1] && ma5Sequence[1] > ma5Sequence[2]; const ma5CrossDown = ma5 < ma10 && priorMa5 >= priorMa10;
+  const recentDeclines = prior.slice(-3).map((bar) => Math.max(0, number(bar.open) - number(bar.close))); const declineFading = recentDeclines.length === 3 && recentDeclines[0] > recentDeclines[1] && recentDeclines[1] >= recentDeclines[2];
+  const threeBigBull = prior.slice(-3).length === 3 && prior.slice(-3).every((bar) => number(bar.open) > 0 && (number(bar.close) - number(bar.open)) / number(bar.open) >= .03); const farAboveMa20 = ma20 > 0 && close / ma20 - 1 > .10;
+  const chaseBan = threeBigBull || farAboveMa20 || hugeUpperShadow; const chaseReasons = [threeBigBull && '连续3根大阳线', farAboveMa20 && '距离MA20超过10%', hugeUpperShadow && '放巨量长上影线'].filter(Boolean);
+  if (chaseBan) rules.push(directRule('orange', '禁止追高', `${chaseReasons.join('、')}，禁止新增仓位；板块强弱需同步人工确认`, 'warning', 65));
+
+  if (ma5 > 0 && close < ma5) rules.push(directRule('blue', '第一层·动能减弱', `跌破MA5 ${ma5.toFixed(3)}，仅作观察，不卖`, 'hold_no_sell', 20));
+  if (ma10 > 0 && close < ma10) rules.push(directRule(volumeHit ? 'orange' : 'blue', '第二层·趋势转弱', volumeHit ? '放量跌破MA10，进入警示观察，暂不直接卖出' : '缩量跌破MA10，暂不动作', 'warning', volumeHit ? 40 : 25));
+  if (ma20 > 0 && close < ma20) rules.push(volumeHit ? directRule('orange', '第三层·趋势破坏', `放量跌破MA20 ${ma20.toFixed(3)}，建议减仓30%-50%`, 'reduce_30_50', 75) : directRule('blue', '第三层·缩量破位', '缩量跌破MA20，先观察，不直接减仓', 'hold_no_sell', 35));
+  const keySupport = Math.min(...prior.slice(-10).map((bar) => number(bar.low)).filter(Boolean)); if (volumeHit && keySupport > 0 && close < keySupport) rules.push(directRule('orange', '第四层·结构破坏', `放量跌破前期平台/关键支撑 ${keySupport.toFixed(3)}，继续减仓`, 'reduce_30_50', 85));
+  if ((ma5CrossDown || ma5 < ma10) && ma5Weakening && volumeHit && close < ma20) rules.push(directRule('red', '第五层·趋势反转', 'MA5下穿并持续走弱，量价确认且跌破MA20，按纪律离场', 'exit', 100));
+
+  if (!chaseBan && close >= ma20) {
+    const supportDistance = Math.min(Math.abs(close - ma10) / ma10, Math.abs(close - ma20) / ma20); const nearSupport = supportDistance <= .025; const pullbackSetup = shrink && bullishAlignment && close <= ma5 * 1.01;
+    if (pullbackSetup && !(nearSupport && (hammer || engulfing) && previous && close > number(previous.close))) rules.push(directRule('blue', '第2档加仓候选·等待确认', nearSupport ? '已缩量回踩MA10/MA20，但尚未出现锤子线/吞没并重新转强；确认后建议加仓20%-30%' : `多头排列 + 缩量回调，但距离MA10/MA20仍有${(supportDistance * 100).toFixed(1)}%，尚未回踩支撑；暂不加仓`, 'add_watch', 45));
+    if (previousHigh20 > 0 && close > previousHigh20 && bullishVolume && bullishAlignment) rules.push(directRule('blue', '①趋势突破·第1档加仓', '突破20日新高 + 放量1.3～1.8倍 + MA5>MA10>MA20，建议加仓30%-40%建立底仓', 'add', 60));
+    if (shrink && nearSupport && (hammer || engulfing) && previous && close > number(previous.close)) rules.push(directRule('blue', '②回踩确认·第2档加仓', '缩量回踩MA10/MA20 + 锤子线/吞没 + 重新转强，优先建议加仓20%-30%', 'add', 70));
+    if (morningStar && previousHigh > 0 && close > previousHigh && volumeHit) rules.push(directRule('blue', '③反转形态·建议加仓', '早晨星 + 反弹突破前高 + 放量改善，建议按计划小仓加仓', 'add', 55));
+    if (volumeHit && previousHigh > 0 && close > previousHigh && bullishAlignment) rules.push(directRule('blue', '第3档金字塔加仓', '放量突破前高 + 多头排列保持，建议加仓10%-20%', 'add', 58));
+  }
+  if (!chaseBan && ma20 > 0 && close < ma20 * .9 && declineFading && change > -.03) rules.push(directRule('blue', '④超跌反弹·小仓建议', '股价超跌 + 下跌衰减；板块企稳需人工确认，仅建议≤20%小仓', 'add', 45));
   return rules;
 }
 async function directStock(item) {
@@ -80,7 +98,7 @@ async function directStock(item) {
   if (history.length < 5) for (const secid of directSecIds(code)) { try { const candidate = await jsonp(`https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=0&end=20500101`); history = (candidate?.data?.klines || []).map((line) => String(line).split(',')).map((row) => ({ open:number(row[1]), close:number(row[2]), high:number(row[3]), low:number(row[4]), volume:number(row[5]) })).filter((row) => row.close > 0); if (history.length >= 5) break; } catch {} }
   const movingAverage = (period) => { const rows = history.slice(-period); return rows.length >= period ? rows.reduce((sum, row) => sum + row.close, 0) / rows.length : 0; };
   const previous = history.slice(-6, -1); const avgVolume = previous.length ? previous.reduce((sum, row) => sum + row.volume, 0) / previous.length : 0;
-  Object.assign(quote, { ma5:movingAverage(5), ma10:movingAverage(10), ma20:movingAverage(20), ma60:movingAverage(60), avg_volume_5:avgVolume, volume_ratio:avgVolume ? number(quote.volume) / avgVolume : 0, recent_closes:history.slice(-30).map((row) => row.close), history_bars:history.length });
+  Object.assign(quote, { ma5:movingAverage(5), ma10:movingAverage(10), ma20:movingAverage(20), ma60:movingAverage(60), avg_volume_5:avgVolume, volume_ratio:avgVolume ? number(quote.volume) / avgVolume : 0, recent_bars:history.slice(-70), recent_closes:history.slice(-30).map((row) => row.close), history_bars:history.length });
   const rules = directEvaluate(quote); const action = [...rules].sort((a, b) => b.priority - a.priority)[0]?.action || 'hold';
   return { ...item, watch_key:item.symbol, symbol:code, name:resolvedName || quote.name, quote, rules, action };
 }
@@ -88,7 +106,7 @@ async function directState() { const stocks = await Promise.all(localWatchlist()
 
 const levelOrder = { none: 0, blue: 1, yellow: 2, orange: 3, red: 4 };
 const levelText = { none: '持有', blue: '注意', yellow: '警示', orange: '减仓', red: '离场' };
-const actionText = { add: '加仓', hold: '持有观望', warning: '警示信号', reduce_30_50: '减仓30%-50%', hold_no_sell: '不卖', stop_loss: '止损减仓', d_add: 'D档加仓', reduce_50_60: '减仓50%-60%', exit_60_70: '出60%-70%', clear: '清仓', reduce: '减仓' };
+const actionText = { add: '建议加仓', add_watch: '等待加仓确认', hold: '持有观望', warning: '警示信号', reduce_30_50: '减仓30%-50%', hold_no_sell: '不卖', stop_loss: '止损减仓', d_add: 'D档加仓', reduce_50_60: '减仓50%-60%', exit_60_70: '出60%-70%', exit: '纪律离场', clear: '清仓', reduce: '减仓' };
 
 function apiFetch(input, options = {}) { const headers = new Headers(options.headers || {}); if (accessToken) headers.set('X-Access-Token', accessToken); return fetch(input, { ...options, headers }); }
 function number(value, fallback = 0) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
@@ -103,17 +121,18 @@ function trendClass(change) { return change > .0001 ? 'rise' : change < -.0001 ?
 function formatChange(change) { return `${change > 0 ? '+' : ''}${(change * 100).toFixed(2)}%`; }
 function highestLevel(rules = []) { return rules.reduce((best, rule) => levelOrder[rule.level] > levelOrder[best] ? rule.level : best, 'none'); }
 function actionFor(stock) { const level = highestLevel(stock.rules); return stock.action || (level === 'red' ? 'clear' : level === 'orange' ? 'reduce_30_50' : (stock.rules || []).some((rule) => rule.title === '上涨放量') ? 'add' : 'hold'); }
-function actionMessage(action) { if (action === 'clear') return '执行立即清仓纪律'; if (action === 'exit_60_70') return '执行出 60%～70% 纪律'; if (action === 'reduce_50_60') return '执行减仓 50%～60% 纪律'; if (['reduce_30_50', 'stop_loss', 'reduce'].includes(action)) return '执行分批减仓纪律'; if (action === 'warning') return '警示信号，按优先级观察'; if (action === 'hold_no_sell') return '不卖，继续观察'; if (['add', 'd_add'].includes(action)) return '符合计划加仓条件'; return '当前按纪律持有观察'; }
-function actionButtonText(action, unavailable) { if (unavailable) return '待连接'; if (action === 'clear') return '✕ 清仓'; if (action === 'exit_60_70') return '− 出60%-70%'; if (['reduce_30_50', 'reduce_50_60', 'stop_loss', 'reduce'].includes(action)) return '− 出一部分'; if (action === 'warning') return '⚠ 警示观察'; if (action === 'hold_no_sell') return '▮▮ 不卖观察'; if (action === 'd_add') return '＋ D档加仓'; if (action === 'add') return '＋ 加仓'; return '▮▮ 持有观望'; }
-function actionTone(action, unavailable) { if (unavailable) return 'unavailable'; if (action === 'clear') return 'clear'; if (['exit_60_70', 'reduce_30_50', 'reduce_50_60', 'stop_loss', 'reduce'].includes(action)) return 'reduce'; if (action === 'warning') return 'warning'; if (['add', 'd_add'].includes(action)) return 'add'; return 'hold'; }
+function actionMessage(action) { if (['clear', 'exit'].includes(action)) return '执行第五层趋势反转离场纪律'; if (action === 'exit_60_70') return '执行出 60%～70% 纪律'; if (action === 'reduce_50_60') return '执行减仓 50%～60% 纪律'; if (['reduce_30_50', 'stop_loss', 'reduce'].includes(action)) return '执行分批减仓纪律'; if (action === 'add_watch') return '等待止跌形态与重新转强确认'; if (action === 'warning') return '警示信号，按优先级观察'; if (action === 'hold_no_sell') return '不卖，继续观察'; if (['add', 'd_add'].includes(action)) return '符合计划加仓条件'; return '当前按纪律持有观察'; }
+function actionButtonText(action, unavailable) { if (unavailable) return '待连接'; if (action === 'clear') return '✕ 清仓'; if (action === 'exit') return '✕ 纪律离场'; if (action === 'exit_60_70') return '− 出60%-70%'; if (['reduce_30_50', 'reduce_50_60', 'stop_loss', 'reduce'].includes(action)) return '− 出一部分'; if (action === 'add_watch') return '⌛ 等待加仓确认'; if (action === 'warning') return '⚠ 警示观察'; if (action === 'hold_no_sell') return '▮▮ 不卖观察'; if (action === 'd_add') return '＋ D档加仓'; if (action === 'add') return '＋ 建议加仓'; return '▮▮ 持有观望'; }
+function actionTone(action, unavailable) { if (unavailable) return 'unavailable'; if (['clear', 'exit'].includes(action)) return 'clear'; if (['exit_60_70', 'reduce_30_50', 'reduce_50_60', 'stop_loss', 'reduce'].includes(action)) return 'reduce'; if (['warning', 'add_watch'].includes(action)) return 'warning'; if (['add', 'd_add'].includes(action)) return 'add'; return 'hold'; }
 function topRule(stock) { return [...(stock.rules || [])].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0))[0]; }
 function stockReason(stock, action, unavailable) {
   if (unavailable) return { text: stock.quote?.error || '行情暂不可用', summary: '等待行情连接' };
   const rule = topRule(stock);
   if (!rule) return { text: '未触发加仓、减仓或离场条件，按纪律持有观察', summary: '趋势完整：持有观望' };
   let layer = '量价信号';
-  if (['clear', 'exit_60_70'].includes(action)) layer = '第五层：趋势反转→离场';
+  if (['clear', 'exit', 'exit_60_70'].includes(action)) layer = '第五层：趋势反转→离场';
   else if (['reduce_30_50', 'reduce_50_60', 'stop_loss', 'reduce'].includes(action)) layer = '第三层：趋势破坏→减仓';
+  else if (action === 'add_watch') layer = '第2档候选：等待止跌确认';
   else if (action === 'warning') layer = '第一层：量价→警示';
   else if (['add', 'd_add'].includes(action)) layer = '入场信号：按档加仓';
   else if (action === 'hold_no_sell') layer = '第一层：缩量破位→不卖';
