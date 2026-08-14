@@ -9,6 +9,54 @@ const accessToken = new URLSearchParams(location.search).get('token') || localSt
 if (accessToken) localStorage.setItem('exit-alert-token', accessToken);
 const apiBase = location.hostname === 'subtle-palmier-6ca45c.netlify.app' ? '' : 'https://subtle-palmier-6ca45c.netlify.app';
 
+function jsonp(url, timeout = 12000) {
+  return new Promise((resolve, reject) => {
+    const callback = `__astock_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement('script');
+    const cleanup = () => { clearTimeout(timer); script.remove(); delete window[callback]; };
+    const timer = setTimeout(() => { cleanup(); reject(new Error('行情请求超时')); }, timeout);
+    window[callback] = (payload) => { cleanup(); resolve(payload); };
+    script.onerror = () => { cleanup(); reject(new Error('行情请求失败')); };
+    script.src = `${url}${url.includes('?') ? '&' : '?'}cb=${callback}`;
+    document.head.appendChild(script);
+  });
+}
+
+function directSecIds(code) { return /^[569]/.test(code) ? [`1.${code}`, `0.${code}`] : [`0.${code}`, `1.${code}`]; }
+function directScale(code, name = '') { return /^(15|16|50|51|52|56|58|59)\d{4}$/.test(code) || /ETF|LOF|基金/i.test(name) ? 1000 : 100; }
+function directRule(level, title, reason, action, priority) { return { level, title, reason, action, priority }; }
+function directEvaluate(quote) {
+  const rules = []; const close = number(quote.price); const open = number(quote.open); const high = number(quote.high); const low = number(quote.low);
+  const ratio = number(quote.volume_ratio); const volumeHit = ratio >= 1.3; const shrink = ratio > 0 && ratio < 1;
+  const body = Math.abs(close - open); const range = Math.max(.0001, high - low); const upper = Math.max(0, high - Math.max(open, close));
+  const upperShadow = upper >= Math.max(body * 2, range * .35); const extremeUpper = upper >= Math.max(body * 3, range * .6);
+  const ma5 = number(quote.ma5); const ma10 = number(quote.ma10); const ma20 = number(quote.ma20); const change = changeOf(quote);
+  if (extremeUpper) rules.push(directRule('red', '极端长上影', '出现极端长上影线，严格按纪律立即清仓', 'clear', 100));
+  else if (upperShadow && volumeHit) rules.push(directRule('orange', '放量长上影', '放量出现长上影，按纪律减仓50%-60%', 'reduce_50_60', 80));
+  if (ma20 && close < ma20) rules.push(volumeHit ? directRule('orange', '放量跌破MA20', `最新价${close.toFixed(3)}跌破MA20 ${ma20.toFixed(3)}，减仓30%-50%`, 'reduce_30_50', 70) : directRule('blue', '缩量跌破MA20', '缩量跌破MA20，先观察，不直接清仓', 'hold_no_sell', 20));
+  else if (ma10 && close < ma10) rules.push(directRule(volumeHit ? 'orange' : 'blue', '跌破MA10', volumeHit ? '放量跌破MA10，进入警示观察' : '缩量跌破MA10，暂不动作', 'warning', volumeHit ? 50 : 25));
+  if (ma5 && close < ma5) rules.push(volumeHit ? directRule('orange', '放量破MA5', `最新价${close.toFixed(3)}跌破MA5 ${ma5.toFixed(3)}且未收回，止损减仓`, 'stop_loss', 55) : directRule('blue', '缩量破MA5', `最新价${close.toFixed(3)}跌破MA5 ${ma5.toFixed(3)}，仅观察，不卖`, 'hold_no_sell', 20));
+  if (change > .003 && volumeHit && ma5 > ma10 && ma10 > ma20) rules.push(directRule('blue', '上涨放量', `量比${ratio.toFixed(2)}，多头排列，趋势确认，可按计划加仓`, 'add', 30));
+  else if (change > .003 && shrink) rules.push(directRule('blue', '上涨缩量', '上涨缩量，可持有，不追高', 'hold', 10));
+  else if (change < -.003 && shrink) rules.push(directRule('blue', '下跌缩量', '下跌缩量，属于正常回踩，观察支撑', 'hold', 12));
+  return rules;
+}
+async function directStock(item) {
+  const code = String(item.symbol || '').match(/\d{6}/)?.[0];
+  if (!code) return { ...item, watch_key:item.symbol, quote:{ symbol:item.symbol, name:item.name || item.symbol, data_status:'unavailable', error:'名称搜索暂不可用，请输入6位股票代码' }, rules:[], action:'hold' };
+  let payload = null;
+  for (const secid of directSecIds(code)) { try { const candidate = await jsonp(`https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f43,f44,f45,f46,f47,f48,f57,f58,f60,f170`); if (candidate?.data?.f57) { payload = candidate.data; break; } } catch {} }
+  if (!payload) return { ...item, watch_key:item.symbol, quote:{ symbol:code, name:item.name || code, data_status:'unavailable', error:'公开行情暂时不可用' }, rules:[], action:'hold' };
+  let history = [];
+  for (const secid of directSecIds(code)) { try { const candidate = await jsonp(`https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=0&end=20500101`); history = (candidate?.data?.klines || []).map((line) => String(line).split(',')).map((row) => ({ open:number(row[1]), close:number(row[2]), high:number(row[3]), low:number(row[4]), volume:number(row[5]) })).filter((row) => row.close > 0); if (history.length >= 5) break; } catch {} }
+  const scale = directScale(code, payload.f58 || ''); const movingAverage = (period) => { const rows = history.slice(-period); return rows.length >= period ? rows.reduce((sum, row) => sum + row.close, 0) / rows.length : 0; };
+  const previous = history.slice(-6, -1); const avgVolume = previous.length ? previous.reduce((sum, row) => sum + row.volume, 0) / previous.length : 0;
+  const quote = { symbol:code, name:payload.f58 || item.name || code, price:number(payload.f43) / scale, prev_close:number(payload.f60) / scale, open:number(payload.f46) / scale, high:number(payload.f44) / scale, low:number(payload.f45) / scale, volume:number(payload.f47), amount:number(payload.f48), change_pct:number(payload.f170) / 100, ma5:movingAverage(5), ma10:movingAverage(10), ma20:movingAverage(20), ma60:movingAverage(60), avg_volume_5:avgVolume, volume_ratio:avgVolume ? number(payload.f47) / avgVolume : 0, recent_closes:history.slice(-30).map((row) => row.close), history_bars:history.length, data_status:'live', source:'东方财富公开行情', timestamp:new Date().toISOString() };
+  const rules = directEvaluate(quote); const action = [...rules].sort((a, b) => b.priority - a.priority)[0]?.action || 'hold';
+  return { ...item, watch_key:item.symbol, symbol:code, name:item.name || quote.name, quote, rules, action };
+}
+async function directState() { const stocks = await Promise.all(localWatchlist().slice(0, 30).map(directStock)); return { stocks, alerts:stocks.flatMap((stock) => stock.rules.map((rule) => ({ ...rule, symbol:stock.symbol, name:stock.name }))), data_source:'东方财富公开行情（浏览器直连）' }; }
+
 const levelOrder = { none: 0, blue: 1, yellow: 2, orange: 3, red: 4 };
 const levelText = { none: '持有', blue: '注意', yellow: '警示', orange: '减仓', red: '离场' };
 const actionText = { add: '加仓', hold: '持有观望', warning: '警示信号', reduce_30_50: '减仓30%-50%', hold_no_sell: '不卖', stop_loss: '止损减仓', d_add: 'D档加仓', reduce_50_60: '减仓50%-60%', exit_60_70: '出60%-70%', clear: '清仓', reduce: '减仓' };
@@ -114,7 +162,10 @@ async function refresh() {
     const response = await apiFetch(`${apiBase}/api/state?watchlist=${watchlistQuery()}`); if (!response.ok) throw new Error(`HTTP ${response.status}`); state.data = await response.json(); render();
     const time = new Date().toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }); $('#header-refresh-time').textContent = `更新于 ${time}`; $('#last-refresh').textContent = `更新于 ${time} · ${state.data.data_source || '云端公开行情'}`;
     [...(state.data.alerts || [])].sort((a, b) => levelOrder[b.level] - levelOrder[a.level]).forEach(announce);
-  } catch { $('#data-status').className = 'connection-state error'; $('#data-status').innerHTML = '<i></i><span>刷新失败</span>'; showToast('刷新失败，请稍后重试'); }
+  } catch {
+    try { state.data = await directState(); render(); const time = new Date().toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }); $('#header-refresh-time').textContent = `更新于 ${time}`; $('#last-refresh').textContent = `更新于 ${time} · ${state.data.data_source}`; [...state.data.alerts].sort((a, b) => levelOrder[b.level] - levelOrder[a.level]).forEach(announce); }
+    catch { $('#data-status').className = 'connection-state error'; $('#data-status').innerHTML = '<i></i><span>刷新失败</span>'; showToast('公开行情暂时不可用，请稍后重试'); }
+  }
 }
 function showToast(message) { $('#toast').textContent = message; $('#toast').classList.add('show'); setTimeout(() => $('#toast').classList.remove('show'), 3200); }
 function scheduleRefresh() { clearInterval(state.timer); if (!state.paused) state.timer = setInterval(refresh, number($('#refresh-interval').value, 30) * 1000); }
