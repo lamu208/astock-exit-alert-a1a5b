@@ -18,3 +18,36 @@
 .discipline-topbar{color:#17202e}.discipline-topbar span{color:#7f8998}.discipline-topbar button{border-color:#d6dce5;background:#fff;color:#263244;box-shadow:0 4px 14px rgba(30,42,62,.05)}
 .discipline-card{border-color:#e2e6ec;background:#fff;color:#687487;box-shadow:0 7px 24px rgba(28,39,62,.06)}
 .discipline-card h2{color:#428fe4}.discipline-card h3{color:#182130}.discipline-card h3 span{color:#8791a0}.discipline-card li b,.discipline-card p b{color:#344055}
+
+/* V2 cloud-monitor status and action palette. */
+.connection-state.warning i{background:#e9a11b}
+.market-state{display:inline-flex;align-items:center;min-height:28px;border:1px solid #dce2ea;border-radius:999px;padding:3px 10px;background:#fff;color:#667184;font-size:12px;white-space:nowrap}
+.market-state.bull{border-color:#bfe6d3;background:#f1fbf6;color:#168757}
+.market-state.sideways{border-color:#f0d9a8;background:#fffaf0;color:#b97908}
+.market-state.bear{border-color:#f2bdc0;background:#fff5f5;color:#cf3038}
+.market-state.unknown{color:#788292}
+.stock-card.tone-add{border-left-color:#7a43d2}
+.stock-card.tone-warning{border-left-color:#e7a21a}
+.stock-card.tone-reduce{border-left-color:#f18716}
+.stock-card.tone-hold{border-left-color:#428fe4}
+.stock-card.tone-clear{border-left-color:#e51c24}
+.stock-card.tone-unavailable{border-left-color:#a7afbb}
+.stock-quote em{font-size:18px;font-style:normal;font-weight:400}
+.stock-source{grid-column:1/-1;margin-top:10px;color:#929baa;font-size:12px;text-align:right}
+.stock-action.warning{border-color:#efc36b;color:#d88a00;background:#fffaf0}
+.stock-reason-row.warning{border-color:#f1ddb0;background:#fffaf0}.stock-reason-row.warning i{background:#e6a11d}
+.stock-reason-row.unavailable{border-color:#e2e5e9;background:#f8f9fa}.stock-reason-row.unavailable i{background:#9aa3af}
+.decision-card.warning{background:#fff7e5;color:#b97500}
+.reason-row.add{border-color:#dfd2f7;background:#fbf8ff}.reason-row.add .reason-dot{background:#7138d6}
+.reason-row.hold{border-color:#d7e9fb;background:#f6fbff}.reason-row.hold .reason-dot{background:#428fe4}
+.reason-row.warning{border-color:#f1ddb0;background:#fffaf0}.reason-row.warning .reason-dot{background:#e6a11d}
+.reason-row.reduce{border-color:#f4ddbf;background:#fff9f1}.reason-row.reduce .reason-dot{background:#f18716}
+.reason-row.clear{border-color:#f2d2d4;background:#fff7f8}.reason-row.clear .reason-dot{background:#e51c24}
+.discipline-card:last-child{margin-bottom:0}
+
+@media(max-width:760px){
+  .header-status{flex-wrap:wrap;row-gap:7px}
+  .market-state{min-height:24px;padding:2px 8px;font-size:11px}
+  .stock-quote em{font-size:13px}
+  .stock-source{text-align:left;font-size:10px}
+}

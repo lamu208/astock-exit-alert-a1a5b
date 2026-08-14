@@ -6,9 +6,10 @@
   <meta name="theme-color" content="#f7f8fb">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="market-api-base" content="https://subtle-palmier-6ca45c.netlify.app">
   <link rel="manifest" href="./manifest.webmanifest">
   <title>智能盯盘</title>
-  <link rel="stylesheet" href="./styles.css?v=20260814-smartdesk10">
+  <link rel="stylesheet" href="./styles.css?v=20260815-v2cloud1">
 </head>
 <body>
   <main class="app-shell">
@@ -16,29 +17,45 @@
       <header class="app-header">
         <div class="brand-block">
           <i class="brand-logo" aria-hidden="true"></i>
-          <div><h1>智能盯盘</h1><p>智能加/减/清仓助手</p></div>
+          <div>
+            <h1>智能盯盘</h1>
+            <p>智能加 / 减 / 清仓纪律助手</p>
+          </div>
         </div>
-        <div class="header-status"><div id="data-status" class="connection-state"><i></i><span>刷新中...</span></div><span class="status-divider">|</span><span id="header-refresh-time">等待更新</span></div>
+        <div class="header-status">
+          <div id="data-status" class="connection-state loading"><i></i><span>刷新中...</span></div>
+          <span class="status-divider">|</span>
+          <span id="header-refresh-time">等待更新</span>
+          <span id="market-state" class="market-state unknown">大盘未确认</span>
+        </div>
         <button id="discipline-button" class="discipline-button" type="button">纪律</button>
       </header>
 
-      <section class="control-panel">
+      <section class="control-panel" aria-label="盯盘控制">
         <form id="add-form" class="control-row add-row">
           <label for="stock-input">添加股票</label>
-          <input id="stock-input" autocomplete="off" placeholder="代码或 sh600000 / 000001" aria-label="股票代码或名称">
+          <input id="stock-input" autocomplete="off" placeholder="代码或名称，例如 600000 / 半导体ETF" aria-label="股票或ETF代码或名称">
           <button class="primary-button" type="submit">添加</button>
         </form>
         <div class="control-row refresh-row">
           <label for="refresh-interval">刷新间隔</label>
-          <select id="refresh-interval" aria-label="刷新间隔"><option value="15">15 秒</option><option value="30" selected>30 秒</option><option value="60">60 秒</option><option value="120">2 分钟</option></select>
+          <select id="refresh-interval" aria-label="刷新间隔">
+            <option value="15">15 秒</option>
+            <option value="30" selected>30 秒</option>
+            <option value="60">60 秒</option>
+            <option value="120">2 分钟</option>
+          </select>
           <button id="pause-refresh" class="secondary-button" type="button"><span>▮▮</span> 暂停</button>
-          <button id="refresh-now" class="secondary-button" type="button"><span>⟳</span> 立即刷新</button>
+          <button id="refresh-now" class="secondary-button" type="button"><span>↻</span> 立即刷新</button>
         </div>
       </section>
 
-      <div id="alert-banner" class="alert-banner hidden" role="status"></div>
-      <section id="watchlist" class="stock-list empty-state"><strong>还没有自选股</strong><span>输入股票代码或名称开始盯盘</span></section>
-      <p id="last-refresh" class="refresh-time">尚未刷新</p>
+      <div id="alert-banner" class="alert-banner hidden" role="status" aria-live="polite"></div>
+      <section id="watchlist" class="stock-list empty-state" aria-live="polite">
+        <strong>还没有自选股</strong>
+        <span>输入股票或ETF代码/名称开始盯盘</span>
+      </section>
+      <p id="last-refresh" class="refresh-time">尚未刷新 · 免费版仅在网页打开时持续监控</p>
     </section>
 
     <section id="discipline-view" class="page-view discipline-page" hidden>
@@ -46,91 +63,23 @@
         <div><span>智能盯盘</span><strong>纪律说明</strong></div>
         <button id="back-watch" type="button">返回盯盘</button>
       </header>
-
-      <article class="discipline-card">
-        <h2>💡 入场四模式 · 金字塔加仓 · 五层递进离场</h2>
-        <section>
-          <h3><span>1.</span> 入场模式</h3>
-          <ul>
-            <li><b>① 趋势突破：</b>突破 20 日新高 + 放量（1.3～1.8倍）+ MA5&gt;MA10&gt;MA20</li>
-            <li><b>② 回踩确认：</b>缩量回踩 MA10/MA20 + 锤子线/吞没 + 重新转强（优先级最高）</li>
-            <li><b>③ 反转形态：</b>早晨星 + 反弹突破前高 + 放量改善</li>
-            <li><b>④ 超跌反弹：</b>股价超跌 + 下跌衰减 + 板块企稳（仅 ≤20% 小仓）</li>
-          </ul>
-        </section>
-        <section>
-          <h3><span>2.</span> 加仓金字塔</h3>
-          <ul>
-            <li><b>第 1 档（30%-40%）：</b>初始突破建立底仓</li>
-            <li><b>第 2 档（20%-30%）：</b>缩量回踩支撑 + 止跌确认</li>
-            <li><b>第 3 档（10%-20%）：</b>放量突破前高 + 多头排列保持</li>
-          </ul>
-        </section>
-        <section>
-          <h3><span>3.</span> 离场五层递进</h3>
-          <ul>
-            <li><b>① 动能减弱：</b>跌破 MA5 → 仅作观察（不卖）</li>
-            <li><b>② 趋势转弱：</b>缩量跌破 MA10 → 暂不动作｜放量跌破 MA10 → 观察</li>
-            <li><b>③ 趋势破坏：</b>放量跌破 MA20 → 减仓 30%-50%｜缩量跌破 → 先观察</li>
-            <li><b>④ 结构破坏：</b>放量跌破前期突破平台/关键支撑 → 继续减仓</li>
-            <li><b>⑤ 趋势反转：</b>MA5 下穿并持续走弱，量价确认后按纪律离场</li>
-          </ul>
-        </section>
-        <p><b>核心原则：</b>趋势优先 → 量价确认 → 回踩优先 → 分批建仓 → 上涨加仓 → 破位减仓</p>
-        <p><b>禁止追高：</b>连续 3 根大阳线、股价距离 MA20 超 10%-12%、放巨量长上影线、个股涨但板块弱</p>
-      </article>
-
-      <article class="discipline-card">
-        <h2>🚪 离场纪律与决策优先级</h2>
-        <section>
-          <h3><span>1.</span> 量价关系判断（优先级最高）</h3>
-          <ul>
-            <li>上涨放量 → 趋势确认（可加仓）</li>
-            <li>上涨缩量 → 可持有（不追高）</li>
-            <li>下跌缩量 → 正常回踩（观察支撑）</li>
-            <li>放量滞涨 → 警惕高位换手（警示信号）</li>
-            <li>放量长上影 → 警惕资金兑现（减仓信号）</li>
-            <li>放量跌破 MA20 → 趋势风险（减仓 30%-50%）</li>
-          </ul>
-        </section>
-        <section>
-          <h3><span>2.</span> 趋势线破坏（MA5 为核心）</h3>
-          <ul>
-            <li>缩量破 MA5 → 观察（不卖）</li>
-            <li>放量破 MA5 + 未收回 → 减仓 30%（止损）</li>
-            <li>破位后 2-3 根 K 线不创新低 → 反弹补仓（D档加仓）</li>
-          </ul>
-        </section>
-        <section>
-          <h3><span>3.</span> K 线与形态</h3>
-          <ul>
-            <li>长上影线 + 大阳线后 + 放量 → 减仓 50%-60%</li>
-            <li>对子顶 + 放量 → 出 60%-70%</li>
-            <li>极端长上影线 → 立即清仓</li>
-          </ul>
-        </section>
-        <section>
-          <h3><span>4.</span> 决策顺序（必须按照）</h3>
-          <ul>
-            <li>① 放量跌破趋势线 → 立即减仓/清仓</li>
-            <li>② 趋势线仍完整 → 判断 K 线形态</li>
-            <li>③ K 线出现警示 → 观察是否伴随放量</li>
-            <li>④ 放量警示信号 → 缓慢减仓</li>
-            <li>⑤ 无警示信号 → 如无其他理由可持有/加仓</li>
-          </ul>
-        </section>
-        <p><b>禁止追高：</b>连续 3+ 大阳线｜股价距离 MA20 超 10%｜放巨量长上影｜个股涨板块弱｜大盘高位放量</p>
-        <p><b>程序近似：</b>用 MA5 作主趋势线、5日均量作成交量基准、离场优先判趋势线 + 量能</p>
-      </article>
+      <div id="discipline-content"></div>
     </section>
   </main>
 
   <div id="detail-sheet" class="sheet-backdrop" aria-hidden="true">
     <section class="detail-sheet" role="dialog" aria-modal="true" aria-label="股票详情">
       <div class="sheet-handle"></div>
-      <header class="sheet-header"><div><p id="detail-code" class="stock-code">—</p><h2 id="detail-name">—</h2></div><button id="close-detail" class="close-button" type="button" aria-label="关闭详情">×</button></header>
-      <div id="detail-decision" class="decision-card">加载中</div>
-      <section class="quote-card"><div><span>最新价</span><strong id="detail-price">—</strong></div><div><span>涨跌幅</span><strong id="detail-change">—</strong></div><div><span>最终动作</span><strong id="detail-action">—</strong></div></section>
+      <header class="sheet-header">
+        <div><p id="detail-code" class="stock-code">—</p><h2 id="detail-name">—</h2></div>
+        <button id="close-detail" class="close-button" type="button" aria-label="关闭详情">×</button>
+      </header>
+      <div id="detail-decision" class="decision-card">加载中...</div>
+      <section class="quote-card">
+        <div><span>最新价</span><strong id="detail-price">—</strong></div>
+        <div><span>涨跌幅</span><strong id="detail-change">—</strong></div>
+        <div><span>最终动作</span><strong id="detail-action">—</strong></div>
+      </section>
       <section class="detail-section"><h3>关键行情指标</h3><div id="detail-metrics" class="metric-grid"></div></section>
       <p id="detail-source" class="detail-source">—</p>
       <section class="detail-section"><h3>加仓 / 减仓 / 离场原因</h3><div id="detail-reasons" class="reason-list"></div></section>
@@ -138,7 +87,9 @@
       <button id="remove-detail-stock" class="remove-stock" type="button">从自选股移除</button>
     </section>
   </div>
-  <div id="toast" class="toast" role="status"></div>
-  <script src="./app.js?v=20260814-smartdesk10"></script>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="./trading-core.js?v=20260815-v2cloud1"></script>
+  <script src="./app.js?v=20260815-v2cloud1"></script>
 </body>
 </html>
