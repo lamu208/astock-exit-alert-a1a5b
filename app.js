@@ -25,6 +25,23 @@ function jsonp(url, timeout = 12000) {
 
 function directSecIds(code) { return /^[569]/.test(code) ? [`1.${code}`, `0.${code}`] : [`0.${code}`, `1.${code}`]; }
 function directScale(code, name = '') { return /^(15|16|50|51|52|56|58|59)\d{4}$/.test(code) || /ETF|LOF|基金/i.test(name) ? 1000 : 100; }
+function tencentKey(code) { return `${/^[569]/.test(code) ? 'sh' : 'sz'}${code}`; }
+function loadAssignedScript(url, variable, timeout = 10000) {
+  return new Promise((resolve) => {
+    let done = false; const script = document.createElement('script'); const previous = window[variable]; delete window[variable];
+    const finish = () => { if (done) return; done = true; clearTimeout(timer); script.remove(); const value = window[variable]; if (previous === undefined) delete window[variable]; else window[variable] = previous; resolve(value || null); };
+    const timer = setTimeout(finish, timeout); script.onload = finish; script.onerror = finish; script.src = url; document.head.appendChild(script);
+  });
+}
+async function tencentQuote(code) {
+  const key = tencentKey(code); const raw = await loadAssignedScript(`https://qt.gtimg.cn/q=${key}&_=${Date.now()}`, `v_${key}`); const values = String(raw || '').split('~');
+  if (values.length < 39 || !number(values[3])) return null; const trade = String(values[35] || '').split('/');
+  return { symbol:code, name:values[1] || code, price:number(values[3]), prev_close:number(values[4]), open:number(values[5]), high:number(values[33]), low:number(values[34]), volume:number(values[36]), amount:number(trade[2]) || number(values[37]) * 10000, change_pct:number(values[32]), data_status:'live', source:'腾讯公开行情', timestamp:new Date().toISOString() };
+}
+async function tencentHistory(code) {
+  const key = tencentKey(code); const variable = `astock_kline_${code}_${Date.now()}`; const payload = await loadAssignedScript(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${key},day,,,120,qfq&_var=${variable}`, variable, 12000);
+  const entry = payload?.data?.[key] || {}; return (entry.qfqday || entry.day || []).map((row) => ({ open:number(row[1]), close:number(row[2]), high:number(row[3]), low:number(row[4]), volume:number(row[5]) })).filter((row) => row.close > 0);
+}
 function resolveStockName(name) {
   return new Promise((resolve) => {
     const script = document.createElement('script'); const previous = window.v_hint; window.v_hint = '';
@@ -54,14 +71,16 @@ async function directStock(item) {
   let code = String(item.symbol || '').match(/\d{6}/)?.[0]; let resolvedName = item.name || '';
   if (!code) { const matched = await resolveStockName(String(item.name || item.symbol || '').replace(/^NAME:/, '').trim()); code = matched?.code; resolvedName = matched?.name || resolvedName; }
   if (!code) return { ...item, watch_key:item.symbol, quote:{ symbol:item.symbol, name:resolvedName || item.symbol, data_status:'unavailable', error:'没有找到对应股票，请改用6位股票代码' }, rules:[], action:'hold' };
-  let payload = null;
-  for (const secid of directSecIds(code)) { try { const candidate = await jsonp(`https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f43,f44,f45,f46,f47,f48,f57,f58,f60,f170`); if (candidate?.data?.f57) { payload = candidate.data; break; } } catch {} }
-  if (!payload) return { ...item, watch_key:item.symbol, quote:{ symbol:code, name:item.name || code, data_status:'unavailable', error:'公开行情暂时不可用' }, rules:[], action:'hold' };
-  let history = [];
-  for (const secid of directSecIds(code)) { try { const candidate = await jsonp(`https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=0&end=20500101`); history = (candidate?.data?.klines || []).map((line) => String(line).split(',')).map((row) => ({ open:number(row[1]), close:number(row[2]), high:number(row[3]), low:number(row[4]), volume:number(row[5]) })).filter((row) => row.close > 0); if (history.length >= 5) break; } catch {} }
-  const scale = directScale(code, payload.f58 || ''); const movingAverage = (period) => { const rows = history.slice(-period); return rows.length >= period ? rows.reduce((sum, row) => sum + row.close, 0) / rows.length : 0; };
+  let quote = null; try { quote = await tencentQuote(code); } catch {}
+  if (!quote) {
+    for (const secid of directSecIds(code)) { try { const candidate = await jsonp(`https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f43,f44,f45,f46,f47,f48,f57,f58,f60,f170`); const payload = candidate?.data; if (payload?.f57) { const scale = directScale(code, payload.f58 || ''); quote = { symbol:code, name:payload.f58 || code, price:number(payload.f43) / scale, prev_close:number(payload.f60) / scale, open:number(payload.f46) / scale, high:number(payload.f44) / scale, low:number(payload.f45) / scale, volume:number(payload.f47), amount:number(payload.f48), change_pct:number(payload.f170) / 100, data_status:'live', source:'东方财富公开行情', timestamp:new Date().toISOString() }; break; } } catch {} }
+  }
+  if (!quote) return { ...item, watch_key:item.symbol, quote:{ symbol:code, name:resolvedName || code, data_status:'unavailable', error:'公开行情暂时不可用' }, rules:[], action:'hold' };
+  let history = []; try { history = await tencentHistory(code); } catch {}
+  if (history.length < 5) for (const secid of directSecIds(code)) { try { const candidate = await jsonp(`https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1&beg=0&end=20500101`); history = (candidate?.data?.klines || []).map((line) => String(line).split(',')).map((row) => ({ open:number(row[1]), close:number(row[2]), high:number(row[3]), low:number(row[4]), volume:number(row[5]) })).filter((row) => row.close > 0); if (history.length >= 5) break; } catch {} }
+  const movingAverage = (period) => { const rows = history.slice(-period); return rows.length >= period ? rows.reduce((sum, row) => sum + row.close, 0) / rows.length : 0; };
   const previous = history.slice(-6, -1); const avgVolume = previous.length ? previous.reduce((sum, row) => sum + row.volume, 0) / previous.length : 0;
-  const quote = { symbol:code, name:payload.f58 || item.name || code, price:number(payload.f43) / scale, prev_close:number(payload.f60) / scale, open:number(payload.f46) / scale, high:number(payload.f44) / scale, low:number(payload.f45) / scale, volume:number(payload.f47), amount:number(payload.f48), change_pct:number(payload.f170) / 100, ma5:movingAverage(5), ma10:movingAverage(10), ma20:movingAverage(20), ma60:movingAverage(60), avg_volume_5:avgVolume, volume_ratio:avgVolume ? number(payload.f47) / avgVolume : 0, recent_closes:history.slice(-30).map((row) => row.close), history_bars:history.length, data_status:'live', source:'东方财富公开行情', timestamp:new Date().toISOString() };
+  Object.assign(quote, { ma5:movingAverage(5), ma10:movingAverage(10), ma20:movingAverage(20), ma60:movingAverage(60), avg_volume_5:avgVolume, volume_ratio:avgVolume ? number(quote.volume) / avgVolume : 0, recent_closes:history.slice(-30).map((row) => row.close), history_bars:history.length });
   const rules = directEvaluate(quote); const action = [...rules].sort((a, b) => b.priority - a.priority)[0]?.action || 'hold';
   return { ...item, watch_key:item.symbol, symbol:code, name:resolvedName || quote.name, quote, rules, action };
 }
