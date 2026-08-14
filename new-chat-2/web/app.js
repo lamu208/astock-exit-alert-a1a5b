@@ -21,6 +21,14 @@ function stockCode(stock) { const candidate = stock.quote?.symbol || stock.symbo
 function highestLevel(rules = []) { return rules.reduce((best, rule) => levelOrder[rule.level] > levelOrder[best] ? rule.level : best, 'none'); }
 function actionFor(stock) { const level = highestLevel(stock.rules); return stock.action || (level === 'red' ? 'clear' : level === 'orange' ? 'reduce_30_50' : (stock.rules || []).some((rule) => rule.title === '上涨放量') ? 'add' : 'hold'); }
 function actionMessage(action) { if (action === 'clear') return '执行立即清仓纪律'; if (action === 'exit_60_70') return '执行出 60%～70% 纪律'; if (action === 'reduce_50_60') return '执行减仓 50%～60% 纪律'; if (['reduce_30_50', 'stop_loss'].includes(action)) return '执行减仓 30%～50% / 止损纪律'; if (action === 'warning') return '警示信号，按优先级观察'; if (action === 'hold_no_sell') return '不卖，继续观察'; if (['add', 'd_add'].includes(action)) return '符合计划加仓条件'; return '当前按纪律持有观察'; }
+function stockReason(stock, action, unavailable) {
+  const reasonType = unavailable ? '连接原因' : ['add', 'd_add'].includes(action) ? '加仓原因' : ['clear', 'exit_60_70'].includes(action) ? '离场原因' : ['reduce', 'reduce_30_50', 'reduce_50_60', 'stop_loss'].includes(action) ? '减仓原因' : '持有原因';
+  if (unavailable) return { type: reasonType, text: stock.quote?.error || '行情暂不可用', summary: '等待行情连接' };
+  const rule = [...(stock.rules || [])].sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0))[0];
+  if (rule) return { type: reasonType, text: rule.reason || rule.title || actionMessage(action), summary: `${actionText[rule.action] || actionText[action] || levelText[rule.level]} · ${rule.title}` };
+  if (action === 'hold' || action === 'hold_no_sell') return { type: reasonType, text: '未触发减仓或离场条件，当前按纪律持有观察', summary: '未触发纪律信号' };
+  return { type: reasonType, text: actionMessage(action), summary: actionText[action] || '纪律提醒' };
+}
 function changeOf(quote) { return quote.prev_close ? (number(quote.price) - number(quote.prev_close)) / number(quote.prev_close) : number(quote.change_pct) / 100; }
 function trendClass(change) { return change > .0001 ? 'rise' : change < -.0001 ? 'fall' : 'flat'; }
 function formatChange(change) { const sign = change > 0 ? '+' : ''; return `${sign}${(change * 100).toFixed(2)}%`; }
@@ -50,7 +58,8 @@ function renderWatchlist() {
   host.innerHTML = stocks.map((stock) => {
     const quote = stock.quote; const unavailable = quote.data_status === 'unavailable'; const change = unavailable ? 0 : changeOf(quote); const action = unavailable ? 'hold' : actionFor(stock); const tone = trendClass(change);
     const displayDecision = unavailable ? '待连接' : actionText[action];
-    return `<button class="stock-row" type="button" data-symbol="${escapeHtml(stockKey(stock))}"><div class="stock-title"><div class="stock-heading"><strong class="stock-name">${escapeHtml(stock.name || quote.name || stock.symbol)}</strong><span class="stock-price ${tone}">${unavailable ? '—' : formatPrice(quote.price, stock)}</span></div><span class="stock-meta"><b class="stock-code-badge">${escapeHtml(stockCode(stock))}</b><i class="live-mark">${unavailable ? '⚠' : '▣'}</i></span></div><div class="stock-middle"><div class="spark-wrap">${sparkline(quote.recent_closes || [], change)}</div><div class="stock-quote"><span class="stock-percent ${tone}">${unavailable ? '行情不可用' : formatChange(change)}</span></div></div><div class="stock-decision"><b class="decision-tag ${unavailable ? 'none' : action}">${displayDecision}</b></div></button>`;
+    const reason = stockReason(stock, action, unavailable);
+    return `<button class="stock-row" type="button" data-symbol="${escapeHtml(stockKey(stock))}"><div class="stock-title"><div class="stock-heading"><strong class="stock-name">${escapeHtml(stock.name || quote.name || stock.symbol)}</strong></div><span class="stock-meta"><b class="stock-code-badge">${escapeHtml(stockCode(stock))}</b><i class="live-mark">${unavailable ? '⚠' : '▣'}</i></span><div class="stock-value"><span class="stock-price ${tone}">${unavailable ? '—' : formatPrice(quote.price, stock)}</span><span class="stock-percent ${tone}">${unavailable ? '行情不可用' : formatChange(change)}</span></div></div><div class="stock-middle"><div class="spark-wrap">${sparkline(quote.recent_closes || [], change)}</div></div><div class="stock-decision"><b class="decision-tag ${unavailable ? 'none' : action}">${displayDecision}</b><span class="decision-hint">建议操作</span></div><div class="stock-reason-row ${unavailable ? 'none' : action}"><span><i>i</i><b>${escapeHtml(reason.type)}</b><span>${escapeHtml(reason.text)}</span></span><em>${escapeHtml(reason.summary)}</em></div></button>`;
   }).join('');
   host.querySelectorAll('.stock-row').forEach((row) => row.addEventListener('click', () => openDetail(row.dataset.symbol)));
 }
