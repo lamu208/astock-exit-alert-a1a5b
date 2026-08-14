@@ -79,7 +79,7 @@ function parseHistory(raw, symbol) {
   const payload = typeof raw === 'string' ? parseJsonAssignment(raw) : raw;
   const key = tencentKey(symbol);
   const entry = payload?.data?.[key] || {};
-  const rows = entry.day || entry.qfqday || [];
+  const rows = Array.isArray(entry.day) && entry.day.length ? entry.day : entry.qfqday || [];
   const bars = (Array.isArray(rows) ? rows : []).map((row) => ({
     date: String(row[0] || ''),
     open: finite(row[1]),
@@ -96,7 +96,7 @@ function parseHistory(raw, symbol) {
 async function fetchHistory(symbol, options = {}) {
   const key = tencentKey(symbol);
   if (!key) throw new UpstreamError('tencent_symbol_invalid', '腾讯证券代码无效');
-  const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${key},day,,,120`;
+  const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${key},day,,,120,qfq`;
   return parseHistory(await getText(url, options), symbol);
 }
 
