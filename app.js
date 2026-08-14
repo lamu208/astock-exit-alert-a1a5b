@@ -8,6 +8,7 @@ const watchlistQuery = () => encodeURIComponent(JSON.stringify(localWatchlist())
 const accessToken = new URLSearchParams(location.search).get('token') || localStorage.getItem('exit-alert-token') || '';
 if (accessToken) localStorage.setItem('exit-alert-token', accessToken);
 const apiBase = location.hostname === 'subtle-palmier-6ca45c.netlify.app' ? '' : 'https://subtle-palmier-6ca45c.netlify.app';
+const useDirectMarket = location.hostname.endsWith('.github.io');
 
 function jsonp(url, timeout = 12000) {
   return new Promise((resolve, reject) => {
@@ -97,6 +98,7 @@ function renderStatus() {
   const live = stocks.filter((stock) => stock.quote.data_status === 'live').length;
   const demo = stocks.filter((stock) => stock.quote.data_status === 'demo').length;
   if (state.paused) { status.className = 'connection-state paused'; status.innerHTML = '<i></i><span>已暂停</span>'; }
+  else if (!localWatchlist().length) { status.className = 'connection-state ok'; status.innerHTML = '<i></i><span>等待添加股票</span>'; }
   else if (live) { status.className = 'connection-state ok'; status.innerHTML = `<i></i><span>${live} 只实时监控</span>`; }
   else if (demo) { status.className = 'connection-state demo'; status.innerHTML = '<i></i><span>演示数据</span>'; }
   else { status.className = 'connection-state error'; status.innerHTML = '<i></i><span>行情未连接</span>'; }
@@ -159,7 +161,9 @@ async function refresh() {
   if (state.paused) return;
   $('#data-status').className = 'connection-state loading'; $('#data-status').innerHTML = '<i></i><span>刷新中...</span>';
   try {
-    const response = await apiFetch(`${apiBase}/api/state?watchlist=${watchlistQuery()}`); if (!response.ok) throw new Error(`HTTP ${response.status}`); state.data = await response.json(); render();
+    if (useDirectMarket) state.data = await directState();
+    else { const response = await apiFetch(`${apiBase}/api/state?watchlist=${watchlistQuery()}`); if (!response.ok) throw new Error(`HTTP ${response.status}`); state.data = await response.json(); }
+    render();
     const time = new Date().toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }); $('#header-refresh-time').textContent = `更新于 ${time}`; $('#last-refresh').textContent = `更新于 ${time} · ${state.data.data_source || '云端公开行情'}`;
     [...(state.data.alerts || [])].sort((a, b) => levelOrder[b.level] - levelOrder[a.level]).forEach(announce);
   } catch {
