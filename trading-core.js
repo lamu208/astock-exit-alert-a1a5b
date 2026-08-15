@@ -83,7 +83,8 @@
           items: [
             ['长上影 + 前一日大阳线 + 放量', '减仓50%-60%'],
             ['对子顶 + 放量', '出60%-70%'],
-            ['极端长上影线', '立即清仓']
+            ['极端长上影线', '立即清仓'],
+            ['无实体阳线的十字星', '不触发形态离场；放量破位、均线死叉等独立风险仍按纪律执行']
           ]
         },
         {
@@ -483,12 +484,13 @@
     const volume = volumeRatio >= 1.3;
     const hugeVolume = volumeRatio >= 2;
     const isConfirmed = !isTradingSession(marketData.source_time);
+    const shapeExitEligible = !patterns.currentShape.doji;
     const market = context.market || { status: 'unknown', effectiveStatus: 'unknown', risk: false, reason: '大盘数据不可用' };
 
-    if (patterns.currentShape.extremeUpper) signals.push(makeSignal('clear', 'extreme_upper_shadow', '极端长上影线', '上影线超过实体3倍且超过收盘价3%，按纪律立即清仓', { confirmed: isConfirmed }));
+    if (shapeExitEligible && patterns.currentShape.extremeUpper) signals.push(makeSignal('clear', 'extreme_upper_shadow', '极端长上影线', '上影线超过实体3倍且超过收盘价3%，按纪律立即清仓', { confirmed: isConfirmed }));
     if (indicators.deathCross) signals.push(makeSignal('clear', 'ma5_death_cross', '第五层·趋势反转', 'MA5从上方下穿MA10，按纪律清仓离场'));
-    if (patterns.doubleTop && volume) signals.push(makeSignal('exit_60_70', 'double_top_volume', '对子顶放量', `近10日双顶且${indicators.volumeLevel}（量比${volumeRatio.toFixed(2)}），按纪律出60%-70%`, { confirmed: isConfirmed }));
-    if (patterns.currentShape.longUpper && patterns.previousBigBull && volume) signals.push(makeSignal('reduce_50_60', 'upper_after_big_bull', '大阳线后放量长上影', `前一日大阳线后出现放量长上影，按纪律减仓50%-60%`, { confirmed: isConfirmed }));
+    if (shapeExitEligible && patterns.doubleTop && volume) signals.push(makeSignal('exit_60_70', 'double_top_volume', '对子顶放量', `近10日双顶且${indicators.volumeLevel}（量比${volumeRatio.toFixed(2)}），按纪律出60%-70%`, { confirmed: isConfirmed }));
+    if (shapeExitEligible && patterns.currentShape.longUpper && patterns.previousBigBull && volume) signals.push(makeSignal('reduce_50_60', 'upper_after_big_bull', '大阳线后放量长上影', `前一日大阳线后出现放量长上影，按纪律减仓50%-60%`, { confirmed: isConfirmed }));
     if (current.close < indicators.previousLow20 && volume) signals.push(makeSignal('reduce_30_50', 'key_support_break', '第四层·结构破坏', `放量跌破20日关键支撑${indicators.previousLow20.toFixed(indicators.priceDigits)}，继续减仓`));
 
     if (current.close < indicators.ma20) {
@@ -645,3 +647,4 @@
     publicIndicators
   };
 });
+
