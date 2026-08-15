@@ -62,6 +62,7 @@
         {
           title: '1. 量价关系判断（优先级最高）',
           items: [
+            ['放量标准（股票）', '当日成交量创可用历史新高，或达到前5日平均成交量的1.3倍以上'],
             ['上涨放量', '趋势确认，可进入加仓条件检查'],
             ['上涨缩量', '可持有，不追高'],
             ['下跌缩量', '正常回踩，观察支撑'],
@@ -82,7 +83,8 @@
           title: '3. K线与形态',
           items: [
             ['长上影 + 前一日大阳线 + 放量', '减仓50%-60%'],
-            ['对子顶 + 放量', '出60%-70%'],
+            ['K线双顶 + 放量', '两峰价格接近、中间回撤≥3%、第二峰转弱 → 出60%-70%'],
+            ['对子顶 + 放量', '当日最高价尾数形成对子（如13.33、66.66、88.99）且量能确认 → 出60%-70%'],
             ['极端长上影线', '立即清仓'],
             ['无实体阳线的十字星', '不触发形态离场；放量破位、均线死叉等独立风险仍按纪律执行']
           ]
@@ -282,6 +284,46 @@
       && last.close > (first.open + first.close) / 2;
   }
 
+  function isPairedPriceTop(value, securityType = 'STOCK') {
+    if (!Number.isFinite(value) || value <= 0) return false;
+    const decimals = value.toFixed(priceDigits(securityType)).split('.')[1] || '';
+    if (decimals.length < 2) return false;
+    const pair = decimals.slice(-2);
+    return pair !== '00' && pair[0] === pair[1];
+  }
+
+  function isKlineDoubleTop(bars, securityType = 'STOCK') {
+    if (!Array.isArray(bars) || bars.length < 8) return false;
+    const currentIndex = bars.length - 1;
+    const current = bars[currentIndex];
+    const previous = bars[currentIndex - 1];
+    const currentShape = candleShape(current, securityType);
+    const secondPeakRejected = current.close < current.open
+      || current.close < previous.close
+      || currentShape.longUpper;
+    if (!secondPeakRejected) return false;
+
+    const firstCandidate = Math.max(1, currentIndex - 20);
+    const lastCandidate = currentIndex - 3;
+    for (let peakIndex = firstCandidate; peakIndex <= lastCandidate; peakIndex += 1) {
+      const peak = bars[peakIndex];
+      const left = bars[peakIndex - 1];
+      const right = bars[peakIndex + 1];
+      const localPeak = peak.high >= left.high
+        && peak.high >= right.high
+        && (peak.high > left.high || peak.high > right.high);
+      if (!localPeak) continue;
+
+      const peakDifference = Math.abs(peak.high - current.high) / Math.max(peak.high, current.high);
+      if (peakDifference > 0.01) continue;
+
+      const trough = Math.min(...bars.slice(peakIndex + 1, currentIndex).map((bar) => bar.low));
+      const lowerPeak = Math.min(peak.high, current.high);
+      if ((lowerPeak - trough) / lowerPeak >= 0.03) return true;
+    }
+    return false;
+  }
+
   function volumeLevel(ratio) {
     if (!Number.isFinite(ratio) || ratio <= 0) return '未知';
     if (ratio < 0.8) return '缩量';
@@ -297,11 +339,18 @@
     const quote = marketData.quote || {};
     const current = series.at(-1);
     const prior = series.slice(0, -1);
-    const volumePeriod = securityType === 'ETF' ? 20 : 5;
+    const volumePeriod = 5;
     const baselineVolume = averageVolume(series, volumePeriod, true);
     const progress = isTradingSession(marketData.source_time) ? tradingProgress(marketData.source_time) : 1;
     const projectedVolume = current && progress > 0 ? current.volume / progress : NaN;
     const volumeRatio = baselineVolume > 0 ? projectedVolume / baselineVolume : NaN;
+    const volumeConfirmationRatio = baselineVolume > 0 && current ? current.volume / baselineVolume : NaN;
+    const historicalMaxVolume = prior.length ? Math.max(...prior.map((bar) => bar.volume)) : NaN;
+    const historicalVolumeHigh = Boolean(current
+      && current.volume > 0
+      && historicalMaxVolume > 0
+      && current.volume > historicalMaxVolume);
+    const volumeConfirmed = volumeConfirmationRatio >= 1.3 || historicalVolumeHigh;
     const ma5 = movingAverage(series, 5);
     const ma10 = movingAverage(series, 10);
     const ma20 = movingAverage(series, 20);
@@ -329,8 +378,13 @@
       previousLow20,
       volumePeriod,
       baselineVolume,
+      projectedVolume,
       volumeRatio,
       volumeLevel: volumeLevel(volumeRatio),
+      volumeConfirmationRatio,
+      historicalMaxVolume,
+      historicalVolumeHigh,
+      volumeConfirmed,
       marketProgress: progress,
       change,
       rsi14: relativeStrengthIndex(series, 14),
@@ -411,8 +465,8 @@
     const previous = indicators.prior.at(-1);
     const currentShape = candleShape(current, indicators.securityType);
     const previousShape = previous ? candleShape(previous, indicators.securityType) : null;
-    const priorTen = indicators.prior.slice(-10);
-    const doubleTop = priorTen.some((bar) => Math.abs(bar.high - current.high) / current.high < 0.01) && currentShape.upper > 0;
+    const klineDoubleTop = isKlineDoubleTop(indicators.series, indicators.securityType);
+    const pairedPriceTop = isPairedPriceTop(current.high, indicators.securityType);
     const stagnant = indicators.volumeRatio >= 1.3
       && Math.abs(indicators.change) < 0.01
       && Number.isFinite(indicators.previousHigh20)
@@ -424,7 +478,8 @@
       previousShape,
       bullishEngulfing: isBullishEngulfing(previous, current),
       morningStar: isMorningStar(indicators.series, indicators.securityType),
-      doubleTop,
+      klineDoubleTop,
+      pairedPriceTop,
       stagnant,
       threeBigBull,
       previousBigBull: Boolean(previousShape?.bigBull),
@@ -438,7 +493,7 @@
     const before = indicators.series.at(-3);
     const previousMa10 = movingAverage(indicators.series, 10, 1);
     const previousMa20 = movingAverage(indicators.series, 20, 1);
-    const volumePeriod = indicators.securityType === 'ETF' ? 20 : 5;
+    const volumePeriod = 5;
     const previousBaseline = average(indicators.series.slice(-(volumePeriod + 2), -2).map((bar) => bar.volume));
     const previousRatio = previousBaseline > 0 ? previous.volume / previousBaseline : NaN;
     const nearSupport = [previousMa10, previousMa20].some((ma) => ma > 0 && Math.abs(previous.low - ma) / ma < 0.015);
@@ -481,7 +536,7 @@
     const current = indicators.current;
     const volumeRatio = indicators.volumeRatio;
     const shrink = volumeRatio < 0.8;
-    const volume = volumeRatio >= 1.3;
+    const volume = indicators.volumeConfirmed;
     const hugeVolume = volumeRatio >= 2;
     const isConfirmed = !isTradingSession(marketData.source_time);
     const shapeExitEligible = !patterns.currentShape.doji;
@@ -489,7 +544,26 @@
 
     if (shapeExitEligible && patterns.currentShape.extremeUpper) signals.push(makeSignal('clear', 'extreme_upper_shadow', '极端长上影线', '上影线超过实体3倍且超过收盘价3%，按纪律立即清仓', { confirmed: isConfirmed }));
     if (indicators.deathCross) signals.push(makeSignal('clear', 'ma5_death_cross', '第五层·趋势反转', 'MA5从上方下穿MA10，按纪律清仓离场'));
-    if (shapeExitEligible && patterns.doubleTop && volume) signals.push(makeSignal('exit_60_70', 'double_top_volume', '对子顶放量', `近10日双顶且${indicators.volumeLevel}（量比${volumeRatio.toFixed(2)}），按纪律出60%-70%`, { confirmed: isConfirmed }));
+    if (shapeExitEligible && patterns.klineDoubleTop) {
+      if (volume) {
+        const volumeReason = indicators.historicalVolumeHigh
+          ? '当日成交量创可用历史新高'
+          : `当日成交量达到前5日均量的${indicators.volumeConfirmationRatio.toFixed(2)}倍`;
+        const pairedReason = patterns.pairedPriceTop
+          ? `；同时最高价${current.high.toFixed(indicators.priceDigits)}形成对子顶`
+          : '';
+        signals.push(makeSignal('exit_60_70', 'kline_double_top_volume', 'K线双顶放量', `两峰价格接近、中间回撤≥3%且第二峰转弱；${volumeReason}${pairedReason}，按纪律出60%-70%`, { confirmed: isConfirmed }));
+      } else {
+        signals.push(makeSignal('warning', 'kline_double_top_wait_volume', 'K线双顶待量能确认', '双顶结构成立，但当日成交量未创历史新高且未达到前5日均量1.3倍，先警示观察', { confirmed: false }));
+      }
+    }
+    if (shapeExitEligible && patterns.pairedPriceTop && volume) {
+      const volumeReason = indicators.historicalVolumeHigh
+        ? '当日成交量创可用历史新高'
+        : `当日成交量达到前5日均量的${indicators.volumeConfirmationRatio.toFixed(2)}倍`;
+      signals.push(makeSignal('exit_60_70', 'paired_price_top_volume', '对子顶放量', `当日最高价${current.high.toFixed(indicators.priceDigits)}形成尾数对子；${volumeReason}，按纪律出60%-70%`, { confirmed: isConfirmed }));
+    }
+    if (shapeExitEligible && patterns.pairedPriceTop && !volume) signals.push(makeSignal('warning', 'paired_price_top_wait_volume', '对子顶待量能确认', `当日最高价${current.high.toFixed(indicators.priceDigits)}形成尾数对子，但量能未达到放量标准，先警示观察`, { confirmed: false }));
     if (shapeExitEligible && patterns.currentShape.longUpper && patterns.previousBigBull && volume) signals.push(makeSignal('reduce_50_60', 'upper_after_big_bull', '大阳线后放量长上影', `前一日大阳线后出现放量长上影，按纪律减仓50%-60%`, { confirmed: isConfirmed }));
     if (current.close < indicators.previousLow20 && volume) signals.push(makeSignal('reduce_30_50', 'key_support_break', '第四层·结构破坏', `放量跌破20日关键支撑${indicators.previousLow20.toFixed(indicators.priceDigits)}，继续减仓`));
 
@@ -610,6 +684,10 @@
       volumeRatio: round(indicators.volumeRatio, 2),
       volumeLevel: indicators.volumeLevel,
       volumePeriod: indicators.volumePeriod,
+      volumeConfirmationRatio: round(indicators.volumeConfirmationRatio, 2),
+      historicalMaxVolume: round(indicators.historicalMaxVolume, 2),
+      historicalVolumeHigh: indicators.historicalVolumeHigh,
+      volumeConfirmed: indicators.volumeConfirmed,
       rsi14: round(indicators.rsi14, 2),
       previousHigh20: round(indicators.previousHigh20),
       previousLow20: round(indicators.previousLow20),
@@ -637,6 +715,8 @@
     candleShape,
     isBullishEngulfing,
     isMorningStar,
+    isPairedPriceTop,
+    isKlineDoubleTop,
     volumeLevel,
     calculateIndicators,
     validateMarketData,
