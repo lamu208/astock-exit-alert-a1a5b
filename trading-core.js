@@ -18,6 +18,15 @@
     clear: { label: '立即清仓', tone: 'clear', priority: 1000 }
   };
 
+  const ENTRY_PRIORITIES = {
+    pullbackConfirmed: 470,
+    trendBreakout: 450,
+    pullbackWaiting: 445,
+    reversal: 430,
+    oversold: 410,
+    dAdd: 390
+  };
+
   const DISCIPLINE_SECTIONS = [
     {
       title: '💡 入场四模式 · 金字塔加仓 · 五层递进离场',
@@ -25,18 +34,19 @@
         {
           title: '1. 入场模式',
           items: [
-            ['① 趋势突破', '突破20日新高 + 放量1.3～1.8倍 + MA5>MA10>MA20'],
-            ['② 回踩确认', '缩量回踩MA10/MA20 + 锤子线/吞没 + 次日重新转强（优先级最高）'],
-            ['③ 反转形态', '早晨星 + 反弹突破前高 + 成交量改善'],
-            ['④ 超跌反弹', '股价超跌 + 下跌衰减 + 板块企稳（仅≤20%小仓）']
+            ['① 趋势突破（30%-40%）', '突破20日新高 + 放量1.3～1.8倍 + MA5>MA10>MA20；初始突破建立底仓'],
+            ['② 回踩确认（20%-30%，优先级最高）', '缩量回踩MA10/MA20 + 锤子线/吞没 + 次日重新转强；缩量回踩支撑 + 止跌确认'],
+            ['③ 反转形态（10%-20%）', '早晨星 + 反弹突破前高 + 成交量改善；放量突破前高 + 多头排列保持'],
+            ['④ 超跌反弹（≤20%小仓）', '股价超跌 + 下跌衰减 + 板块企稳']
           ]
         },
         {
-          title: '2. 加仓金字塔',
+          title: '2. 加仓提醒优先级',
           items: [
-            ['第1档（30%-40%）', '初始突破建立底仓'],
-            ['第2档（20%-30%）', '缩量回踩支撑 + 止跌确认'],
-            ['第3档（10%-20%）', '放量突破前高 + 多头排列保持']
+            ['最高优先级', '回踩确认（20%-30%）'],
+            ['第二优先级', '趋势突破（30%-40%）'],
+            ['第三优先级', '反转形态（10%-20%）'],
+            ['第四优先级', '超跌反弹（≤20%小仓）']
           ]
         },
         {
@@ -61,7 +71,7 @@
         {
           title: '1. 量价关系判断（优先级最高）',
           items: [
-            ['上涨放量', '趋势确认，可加仓'],
+            ['上涨放量', '趋势确认；仅在满足四种入场模式之一时可加仓'],
             ['上涨缩量', '可持有，不追高'],
             ['下跌缩量', '正常回踩，观察支撑'],
             ['放量滞涨', '警惕高位换手，警示观察'],
@@ -680,21 +690,19 @@
     const pullbackConfirmed = previousPullbackSetup(indicators) && (current.close > current.open || current.close > indicators.ma5);
     const entryVolumeRatio = indicators.volumeConfirmationRatio;
     const trendBreakout = current.high > indicators.previousHigh20 && entryVolumeRatio >= 1.3 && entryVolumeRatio <= 1.8 && indicators.bullishAlignment;
-    const volumePriceUp = rising && volume && current.close >= indicators.ma5;
-    const reversal = patterns.morningStar && current.close > indicators.previousHigh20 && current.volume > (indicators.prior.at(-1)?.volume || Infinity);
+    const reversal = patterns.morningStar && current.close > indicators.previousHigh20 && volume && indicators.bullishAlignment;
     const recentChanges = indicators.series.slice(-4).map((bar, index, sample) => index === 0 ? 0 : (sample[index - 1].close - bar.close) / sample[index - 1].close).slice(1);
     const declineFading = recentChanges.length === 3 && recentChanges[0] > recentChanges[1] && recentChanges[1] > recentChanges[2] && recentChanges[2] > 0;
     const oversoldBase = (indicators.rsi14 < 30 || indicators.deviationMa20 < -0.10) && declineFading;
     const sectorStable = context.sectorStable === true;
     const dAdd = detectDAdd(indicators);
     const addCandidates = [];
-    if (volumePriceUp) addCandidates.push(makeSignal('add', 'volume_price_up', '量价确认·可加仓', '上涨放量且MA5趋势线完整，按纪律进入加仓条件', { scope: 'entry', priority: 410, details: { mode: 'volume_price' } }));
-    if (trendBreakout) addCandidates.push(makeSignal('add', 'entry_breakout', '第1档·趋势突破', `突破20日新高并放量${entryVolumeRatio.toFixed(2)}倍，均线多头排列`, { scope: 'entry', priority: 425, details: { mode: 'breakout' } }));
-    if (pullbackConfirmed) addCandidates.push(makeSignal('add', 'entry_pullback_confirmed', '第2档·回踩确认', '前一日缩量回踩支撑并出现止跌形态，今日重新转强', { scope: 'entry', priority: 435, details: { mode: 'pullback' } }));
-    else if (pullbackWarning) addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '回踩预警', '缩量触及MA10/MA20并出现止跌形态，等待次日确认', { scope: 'entry', confirmed: false, details: { mode: 'pullback' } }));
-    if (reversal) addCandidates.push(makeSignal('add', 'entry_reversal', '第1档·反转形态', '早晨星后突破20日前高且成交量改善', { scope: 'entry', priority: 420, details: { mode: 'reversal' } }));
-    if (oversoldBase) addCandidates.push(makeSignal(sectorStable ? 'add' : 'wait_add', 'entry_oversold', '超跌反弹候选', sectorStable ? '超跌、下跌衰减且板块企稳，仅建议≤20%小仓' : '超跌和下跌衰减成立，但板块企稳尚未确认', { scope: 'entry', confirmed: sectorStable, details: { mode: 'oversold' } }));
-    if (dAdd) addCandidates.push(makeSignal('d_add', 'entry_d_add', '反弹补仓·D档加仓', '破位后2-3根K线不创新低，当前反弹收阳，按纪律执行D档加仓；不计算具体数量', { scope: 'entry', details: { mode: 'd_add' } }));
+    if (trendBreakout) addCandidates.push(makeSignal('add', 'entry_breakout', '第二优先级·趋势突破（30%-40%）', `突破20日新高并放量${entryVolumeRatio.toFixed(2)}倍，MA5>MA10>MA20，初始突破建立底仓`, { scope: 'entry', priority: ENTRY_PRIORITIES.trendBreakout, details: { mode: 'breakout', allocation: '30%-40%', rank: 2 } }));
+    if (pullbackConfirmed) addCandidates.push(makeSignal('add', 'entry_pullback_confirmed', '最高优先级·回踩确认（20%-30%）', '前一日缩量回踩MA10/MA20并出现锤子线或吞没形态，今日重新转强，缩量回踩支撑且止跌确认', { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackConfirmed, details: { mode: 'pullback', allocation: '20%-30%', rank: 1 } }));
+    else if (pullbackWarning) addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '最高优先级候选·等待回踩确认', '缩量触及MA10/MA20并出现锤子线或吞没形态，等待次日重新转强后再加仓20%-30%', { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackWaiting, confirmed: false, details: { mode: 'pullback', allocation: '20%-30%', rank: 1 } }));
+    if (reversal) addCandidates.push(makeSignal('add', 'entry_reversal', '第三优先级·反转形态（10%-20%）', '早晨星后放量突破20日前高，成交量改善且多头排列保持', { scope: 'entry', priority: ENTRY_PRIORITIES.reversal, details: { mode: 'reversal', allocation: '10%-20%', rank: 3 } }));
+    if (oversoldBase) addCandidates.push(makeSignal(sectorStable ? 'add' : 'wait_add', 'entry_oversold', '第四优先级·超跌反弹（≤20%小仓）', sectorStable ? '股价超跌、下跌衰减且板块企稳，仅建议≤20%小仓' : '超跌和下跌衰减成立，但板块企稳尚未确认，暂不加仓', { scope: 'entry', priority: ENTRY_PRIORITIES.oversold, confirmed: sectorStable, details: { mode: 'oversold', allocation: '≤20%', rank: 4 } }));
+    if (dAdd) addCandidates.push(makeSignal('d_add', 'entry_d_add', '反弹补仓·D档加仓', '破位后2-3根K线不创新低，当前反弹收阳，按纪律执行D档加仓；不计算具体数量', { scope: 'entry', priority: ENTRY_PRIORITIES.dAdd, details: { mode: 'd_add' } }));
 
     const riskBlocksAdding = signals.some((signal) => signal.priority >= ACTIONS.warning.priority);
     addCandidates.forEach((candidate) => {
@@ -754,6 +762,7 @@
 
   return {
     ACTIONS,
+    ENTRY_PRIORITIES,
     DISCIPLINE_SECTIONS,
     finiteNumber,
     symbolDigits,
