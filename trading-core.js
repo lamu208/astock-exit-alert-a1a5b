@@ -30,7 +30,8 @@
   };
 
   const VOLUME_PRICE_PRIORITIES = {
-    risingVolume: 420,
+    preBreakoutStrength: 230,
+    risingVolume: 105,
     stagnation: 520,
     fallingShrink: 170,
     risingShrink: 160
@@ -95,16 +96,27 @@
         {
           title: '1. 趋势优先，量价确认',
           items: [
-            ['上涨放量', '趋势确认（可加仓）'],
+            ['放量上涨', '不触发离场'],
+            ['放量上涨 + 突破关键位', '触发加仓判断'],
             ['上涨缩量', '可持有（不追高）'],
             ['下跌缩量', '正常回踩（观察支撑）'],
+            ['放量下跌 + 跌破MA10', '进入风险观察'],
+            ['放量下跌 + 跌破MA20', '减仓30%-50%'],
+            ['放量下跌 + 跌破关键平台/前期突破位', '继续减仓'],
             ['放量滞涨', '警惕高位换手（警示信号）'],
-            ['放量长上影', '警惕资金兑现（减仓信号）'],
-            ['放量跌破MA20', '趋势风险（减仓30%-50%）']
+            ['放量长上影', '警惕资金兑现（减仓信号）']
           ]
         },
         {
-          title: '2. 趋势线破坏（MA5为核心）',
+          title: '2. 突破前蓄势 / 强势转强（持仓状态识别）',
+          items: [
+            ['触发条件', '股价>MA5 + MA5>MA10>MA20 + 此前3-5日主要在MA5附近缩量整理 + 整理期间未有效跌破MA10 + 当日收阳并明显转强 + 量比≥1.20 + 尚未突破20日新高'],
+            ['系统动作', '持有观望｜强势转强'],
+            ['识别说明', 'MA5附近缩量整理 → 放量转强；尚未突破20日新高，等待突破确认']
+          ]
+        },
+        {
+          title: '3. 趋势线破坏（MA5为核心）',
           items: [
             ['缩量破MA5', '观察（不卖）'],
             ['放量破MA5（量比≥1.3）+ 当日未收回', '减仓30%（止损）'],
@@ -113,7 +125,7 @@
           ]
         },
         {
-          title: '3. K线与形态',
+          title: '4. K线与形态',
           items: [
             ['长上影线 + 大阳线后 + 放量', '减仓50%-60%'],
             ['K线双顶 + 放量', '出60%-70%'],
@@ -124,7 +136,7 @@
           ]
         },
         {
-          title: '4. 盘口警示（连续大阳线/涨停线后）',
+          title: '5. 盘口警示（连续大阳线/涨停线后）',
           items: [
             ['剧烈震荡盘口', '反复大波浪形态剧烈震荡 → 缩量减一部分｜放量出比一半多'],
             ['假强势盘口', '开盘急速拉升但不涨停/炸板 → 缩量减一部分｜放量出比一半多'],
@@ -132,7 +144,7 @@
           ]
         },
         {
-          title: '5. 决策顺序（必须按照）',
+          title: '6. 决策顺序（必须按照）',
           items: [
             ['①', '放量跌破趋势线 → 立即减仓/清仓'],
             ['②', '趋势线仍完整 → 判断K线形态'],
@@ -653,6 +665,46 @@
       && current.low >= ma5 * 0.96;
   }
 
+  function detectPreBreakoutStrength(indicators) {
+    const bars = indicators?.series;
+    const current = indicators?.current;
+    if (!Array.isArray(bars) || bars.length < 25 || !current || indicators.prior.length < 10) return false;
+    if (!(current.close > indicators.ma5
+      && indicators.bullishAlignment
+      && current.close > current.open
+      && current.close > indicators.prior.at(-1).close
+      && indicators.volumeRatio >= 1.2
+      && current.high <= indicators.previousHigh20)) return false;
+
+    const consolidation = indicators.prior.slice(-5);
+    const earlier = indicators.prior.slice(-10, -5);
+    let nearMa5Days = 0;
+    let heldMa10 = true;
+    consolidation.forEach((bar, index) => {
+      const offset = consolidation.length - index;
+      const dayMa5 = movingAverage(bars, 5, offset);
+      const dayMa10 = movingAverage(bars, 10, offset);
+      const nearMa5 = Number.isFinite(dayMa5)
+        && Math.abs(bar.close - dayMa5) / dayMa5 <= 0.03
+        && bar.low <= dayMa5 * 1.02
+        && bar.high >= dayMa5 * 0.98;
+      if (nearMa5) nearMa5Days += 1;
+      if (!Number.isFinite(dayMa10) || bar.close < dayMa10 * 0.99) heldMa10 = false;
+    });
+    const consolidationVolumes = consolidation.map((bar) => bar.volume);
+    const earlierVolumes = earlier.map((bar) => bar.volume);
+    const consolidationAverageVolume = average(consolidationVolumes);
+    const earlierAverageVolume = average(earlierVolumes);
+    const consolidationHigh = Math.max(...consolidation.map((bar) => bar.high));
+    const consolidationLow = Math.min(...consolidation.map((bar) => bar.low));
+    const compactRange = consolidationLow > 0 && consolidationHigh / consolidationLow - 1 <= 0.08;
+    const volumeContracted = !Number.isFinite(earlierAverageVolume)
+      || earlierAverageVolume <= 0
+      || consolidationAverageVolume <= earlierAverageVolume * 1.05;
+    const bodyStrength = current.open > 0 && (current.close - current.open) / current.open >= 0.005;
+    return nearMa5Days >= 3 && heldMa10 && compactRange && volumeContracted && bodyStrength;
+  }
+
   function detectDAdd(indicators) {
     const bars = indicators.series;
     if (bars.length < 25 || !indicators.current || indicators.current.close <= indicators.current.open) return false;
@@ -764,10 +816,13 @@
       else if (shrink) signals.push(makeSignal('reduce_30', 'tape_warning_shrink', '盘口警示缩量·减一部分', `${tapeReason}；成交量萎缩，按纪律减一部分`, { confirmed: true }));
       else signals.push(makeSignal('warning', 'tape_warning_wait_volume', '盘口警示·观察量能', `${tapeReason}；量能尚未明确，先警示观察`, { confirmed: false }));
     }
-    if (current.close < indicators.previousLow20 && volume) signals.push(makeSignal('reduce_30_50', 'key_support_break', '第四层·结构破坏', `放量跌破前期突破平台/关键支撑${indicators.previousLow20.toFixed(indicators.priceDigits)}，继续减仓`));
+    if (current.close < indicators.previousLow20) {
+      if (falling && volume) signals.push(makeSignal('reduce_30_50', 'key_support_break', '第四层·结构破坏', `放量下跌并跌破前期突破平台/关键支撑${indicators.previousLow20.toFixed(indicators.priceDigits)}，按纪律继续减仓`));
+      else if (volume) signals.push(makeSignal('warning', 'key_support_break_wait_direction', '关键平台下方·等待方向确认', '已在关键平台/前期突破位下方，但当日不是放量下跌，先进入风险观察'));
+    }
 
     if (current.close < indicators.ma20) {
-      if (volume) signals.push(makeSignal('reduce_30_50', 'ma20_break_volume', '第三层·趋势破坏', `量比${volumeRatio.toFixed(2)}放量跌破MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}`));
+      if (falling && volume) signals.push(makeSignal('reduce_30_50', 'ma20_break_volume', '第三层·趋势破坏', `量比${volumeRatio.toFixed(2)}，放量下跌并跌破MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}，按纪律减仓30%-50%`));
       else if (shrink) signals.push(makeSignal('hold_no_sell', 'ma20_break_shrink', '缩量跌破MA20', '缩量破位，先观察，不直接减仓'));
       else signals.push(makeSignal('warning', 'ma20_break_unconfirmed_volume', '跌破MA20待量能确认', '量能未达到放量标准，暂按警示观察'));
     }
@@ -780,11 +835,12 @@
     }
 
     if (current.close < indicators.ma10 && current.close >= indicators.ma20) {
-      signals.push(volume
-        ? makeSignal('reduce_30_40', 'ma10_break_volume', '第二层·趋势转弱', '放量跌破MA10，按纪律减仓30%-40%')
+      signals.push(falling && volume
+        ? makeSignal('warning', 'ma10_break_volume', '放量下跌并跌破MA10·风险观察', '进入风险观察，等待是否收回MA10；尚未跌破MA20，不执行减仓')
         : makeSignal('hold_no_sell', 'ma10_break_no_volume', '跌破MA10暂不动作', '未放量，按纪律暂不卖出'));
     }
 
+    if (rising && expandedVolume) signals.push(makeSignal('hold', 'volume_price_up', '放量上涨·不触发离场', '放量上涨只确认趋势，不触发离场；只有突破20日新高或关键位后才进入加仓判断', { priority: VOLUME_PRICE_PRIORITIES.risingVolume }));
     if (rising && shrink) signals.push(makeSignal('hold', 'volume_price_up_shrink', '趋势完整·上涨缩量', '趋势线完整，上涨缩量可持有但不追高', { priority: VOLUME_PRICE_PRIORITIES.risingShrink }));
     if (falling && shrink) signals.push(makeSignal('hold_no_sell', 'volume_price_down_shrink', '回踩观察·下跌缩量', '下跌缩量属于正常回踩，继续判断MA5/MA10/MA20支撑是否收回', { priority: VOLUME_PRICE_PRIORITIES.fallingShrink }));
     if (patterns.stagnant) signals.push(makeSignal('warning', 'volume_stagnation', '量价警示·放量滞涨', '量比≥1.3、涨幅不足1%且接近前高，警惕高位换手', { priority: VOLUME_PRICE_PRIORITIES.stagnation }));
@@ -848,7 +904,6 @@
       && current.close > current.open
       && indicators.bullishAlignment
       && expandedVolume;
-    const volumePriceUp = rising && expandedVolume && current.close >= indicators.ma5 && indicators.bullishAlignment;
     const reversal = patterns.morningStar
       && current.close > indicators.previousHigh20
       && entryVolumeRatio >= 1.3
@@ -859,8 +914,9 @@
     const oversoldBase = (indicators.rsi14 < 30 || indicators.deviationMa20 < -0.10) && declineFading;
     const sectorStable = context.sectorStable === true;
     const dAdd = detectDAdd(indicators);
+    const preBreakoutStrength = detectPreBreakoutStrength(indicators);
     const addCandidates = [];
-    if (volumePriceUp) addCandidates.push(makeSignal('add', 'volume_price_up', '趋势确认·上涨放量（建议加仓）', `MA5>MA10>MA20且价格站在MA5上方，量比${entryVolumeRatio.toFixed(2)}（${volumeLevel(entryVolumeRatio)}），趋势获得量价确认`, { scope: 'entry', priority: VOLUME_PRICE_PRIORITIES.risingVolume, details: { mode: 'volume_price', entryMode: 'breakout', rank: 0 } }));
+    if (preBreakoutStrength) signals.push(makeSignal('hold', 'pre_breakout_strength', '持有观望｜强势转强', 'MA5附近缩量整理 → 放量转强；尚未突破20日新高，等待突破确认', { priority: VOLUME_PRICE_PRIORITIES.preBreakoutStrength, details: { mode: 'pre_breakout_strength', breakoutLevel: indicators.previousHigh20 } }));
     if (trendBreakout) addCandidates.push(makeSignal('add', 'entry_breakout', '①趋势突破·第1档建仓（40%）', `突破20日新高并达到5日均量${entryVolumeRatio.toFixed(2)}倍，MA5>MA10>MA20；止损设在突破K线最低点${current.low.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.trendBreakout, details: { mode: 'breakout', entryMode: 'breakout', allocation: '40%', stop: current.low, rank: 2 } }));
     if (pullbackConfirmed) {
       const confirmedSupport = ma5CloseHeld ? supportLevels[0] : touchedSupport || previousPullback.support || supportLevels[1];
@@ -880,7 +936,7 @@
         : `缩量触及${waitingSupport.label}并出现锤子线或吞没形态，等待重新转强`;
       addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '②回踩确认候选·等待重新转强', `${waitReason}后再加仓${waitAllocation}`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackWaiting, confirmed: false, details: { mode: 'pullback', entryMode: 'pullback', allocation: waitAllocation, rank: 1, support: waitingSupport.label } }));
     }
-    if (localBreakout) addCandidates.push(makeSignal('add', 'entry_local_breakout', '第3档加仓（15%）', `放量突破近5日高点${previousHigh5.toFixed(indicators.priceDigits)}且多头排列保持；止损设在MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.localBreakout, details: { mode: 'local_breakout', entryMode: 'reversal', allocation: '15%', stop: indicators.ma10, rank: 3 } }));
+    if (localBreakout) addCandidates.push(makeSignal('add', 'entry_local_breakout', '突破关键位·第3档加仓（15%）', `放量上涨并突破近5日关键高点${previousHigh5.toFixed(indicators.priceDigits)}，触发加仓判断；多头排列保持，止损设在MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.localBreakout, details: { mode: 'local_breakout', entryMode: 'reversal', allocation: '15%', stop: indicators.ma10, rank: 3 } }));
     if (reversal) addCandidates.push(makeSignal('add', 'entry_reversal', '③反转形态·第3档加仓（15%）', `早晨星后突破20日前高，当日量为5日均量${entryVolumeRatio.toFixed(2)}倍且高于前日，止损设在MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.reversal, details: { mode: 'reversal', entryMode: 'reversal', allocation: '15%', stop: indicators.ma10, rank: 3 } }));
     if (oversoldBase) addCandidates.push(makeSignal(sectorStable ? 'add' : 'wait_add', 'entry_oversold', '④超跌反弹（≤20%小仓）', sectorStable ? '股价超跌、下跌衰减且板块企稳，仅建议≤20%小仓' : '超跌和下跌衰减成立，但板块企稳尚未确认，暂不加仓', { scope: 'entry', priority: ENTRY_PRIORITIES.oversold, confirmed: sectorStable, details: { mode: 'oversold', entryMode: 'oversold', allocation: '≤20%', rank: 4 } }));
     if (dAdd) addCandidates.push(makeSignal('d_add', 'entry_d_add', '反弹补仓·D档加仓', '破位后2-3根K线不创新低且当前反弹收阳，用已减仓部分的30%-50%回补；止损设在反弹新低', { scope: 'entry', priority: ENTRY_PRIORITIES.dAdd, details: { mode: 'd_add', entryMode: 'pullback', allocation: '已减仓部分的30%-50%', stop: '反弹新低' } }));
@@ -1002,6 +1058,7 @@
     isBullishEngulfing,
     isMorningStar,
     isMa5CloseHeld,
+    detectPreBreakoutStrength,
     isPairedPriceTop,
     detectPairedPriceTop,
     isKlineDoubleTop,
