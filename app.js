@@ -106,6 +106,23 @@ function signalLabel(signal) {
   return `${actionIcon(signal.action)} ${signal.label}`;
 }
 
+function tradeSide(signal) {
+  const action = signal?.action || '';
+  if (action === 'add' || action === 'd_add' || action === 'wait_add') {
+    return { label: '\u4f4e\u5438', tone: 'low-buy' };
+  }
+  if (action === 'clear' || action.startsWith('reduce') || action.startsWith('exit')) {
+    return { label: '\u9ad8\u629b', tone: 'high-sell' };
+  }
+  if (action === 'warning') {
+    return { label: '\u9ad8\u629b\u89c2\u5bdf', tone: 'high-sell' };
+  }
+  if (action === 'unavailable') {
+    return { label: '\u7b49\u5f85', tone: 'neutral' };
+  }
+  return { label: '\u89c2\u671b', tone: 'neutral' };
+}
+
 function stockKey(stock) {
   return stock.watch_key || stock.symbol || stock.name;
 }
@@ -191,6 +208,7 @@ function stockCard(stock) {
   const digits = indicators?.priceDigits ?? core.priceDigits(core.securityTypeOf(stock.symbol, stock.name, stock.security_type));
   const change = Number(quote.previous_close) > 0 ? (Number(quote.price) - Number(quote.previous_close)) / Number(quote.previous_close) : NaN;
   const summary = reasonSummary(stock);
+  const side = tradeSide(signal);
   const metrics = metricPairs(stock).map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
   const source = stock.source_label || (stock.source === 'eastmoney' ? '东方财富' : stock.source === 'tencent' ? '腾讯备用' : '无可用来源');
   return `
@@ -198,9 +216,9 @@ function stockCard(stock) {
       <button class="stock-remove" type="button" data-remove="${escapeHtml(stockKey(stock))}" aria-label="移除${escapeHtml(stock.name)}">×</button>
       <div class="stock-card-title"><strong>${escapeHtml(stock.name || codeOf(stock.symbol) || '未知标的')}</strong><span>${escapeHtml(codeOf(stock.symbol) || stock.symbol || '')}</span></div>
       <div class="stock-quote ${trendClass(change)}"><strong>${formatPrice(quote.price, digits)}</strong><span>${formatPercent(change)}</span><em>${Number.isFinite(change) ? formatSignedPrice(Number(quote.price) - Number(quote.previous_close), digits) : '—'}</em></div>
-      <button class="stock-action ${escapeHtml(signal.tone)}" type="button">${escapeHtml(signalLabel(signal))}</button>
+      <div class="stock-card-reason ${escapeHtml(signal.tone)}"><b>${escapeHtml(summary.title)}</b><span>${escapeHtml(summary.reason)}</span><small>${escapeHtml(summary.side)}</small></div>
+      <div class="stock-trade-side ${escapeHtml(side.tone)}"><strong>${escapeHtml(side.label)}</strong><span>${escapeHtml(signal.label)}</span></div>
       <div class="stock-metrics">${metrics}</div>
-      <div class="stock-reason-row ${escapeHtml(signal.tone)}"><span><i>i</i><b>${escapeHtml(summary.title)}</b><em>${escapeHtml(summary.reason)}</em></span><strong>${escapeHtml(summary.side)}</strong></div>
       <div class="stock-source">${escapeHtml(source)} · ${escapeHtml(formatTime(stock.source_time))}${stock.data_quality?.fallback ? ' · 已启用备用源' : ''}</div>
     </article>`;
 }
