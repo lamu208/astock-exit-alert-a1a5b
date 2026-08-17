@@ -56,3 +56,91 @@
 .alert-banner.warning{background:#fff8e8;color:#c47b00}
 .alert-banner.reduce{background:#fff3e5;color:#e27609}
 .alert-banner.clear{background:#fff0f1;color:#d91f29}
+
+/* V3 compact three-column decision panel: quote | reason | high-sell/low-buy. */
+.stock-card{
+  grid-template-columns:minmax(230px,.9fr) minmax(300px,1.35fr) minmax(132px,170px);
+  grid-template-rows:auto auto;
+  column-gap:28px;
+  align-items:center;
+}
+.stock-card-title{grid-column:1;grid-row:1}
+.stock-quote{grid-column:1;grid-row:2}
+.stock-card-reason{
+  grid-column:2;
+  grid-row:1/3;
+  align-self:stretch;
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  justify-content:center;
+  border-left:3px solid #d7e1ec;
+  padding:6px 28px;
+}
+.stock-card-reason b{overflow:hidden;color:#263244;font-size:16px;text-overflow:ellipsis;white-space:nowrap}
+.stock-card-reason span{
+  display:-webkit-box;
+  overflow:hidden;
+  margin-top:7px;
+  color:#667184;
+  font-size:14px;
+  line-height:1.55;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+}
+.stock-card-reason small{overflow:hidden;margin-top:7px;color:#98a1ae;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.stock-card-reason.add{border-left-color:#8a54df}
+.stock-card-reason.hold{border-left-color:#428fe4}
+.stock-card-reason.warning{border-left-color:#e6a11d}
+.stock-card-reason.reduce{border-left-color:#f18716}
+.stock-card-reason.clear{border-left-color:#e51c24}
+.stock-card-reason.unavailable{border-left-color:#a7afbb}
+.stock-trade-side{
+  grid-column:3;
+  grid-row:1/3;
+  display:grid;
+  place-items:center;
+  justify-self:end;
+  min-width:130px;
+  border:1px solid;
+  border-radius:8px;
+  padding:12px 14px;
+  background:#fff;
+  text-align:center;
+}
+.stock-trade-side strong{font-size:20px;font-weight:650;white-space:nowrap}
+.stock-trade-side span{margin-top:4px;color:inherit;font-size:12px;line-height:1.35;opacity:.8}
+.stock-trade-side.low-buy{border-color:#cdb9f3;background:#faf7ff;color:#7138d6}
+.stock-trade-side.high-sell{border-color:#f2bd77;background:#fff9f0;color:#ec7f0d}
+.stock-trade-side.neutral{border-color:#b9d8f9;background:#f7fbff;color:#428fe4}
+.stock-card>.stock-action{grid-column:3;grid-row:1/3;min-width:130px}
+.stock-metrics,.stock-source{grid-column:1/-1}
+
+@media(max-width:760px){
+  .stock-card{
+    grid-template-columns:minmax(105px,.9fr) minmax(0,1.25fr) minmax(72px,88px);
+    grid-template-rows:auto auto;
+    column-gap:9px;
+    padding:18px 10px 12px;
+  }
+  .stock-card-title{gap:6px;padding-left:4px;flex-wrap:wrap}
+  .stock-card-title strong{font-size:16px}
+  .stock-card-title span{font-size:11px}
+  .stock-quote{gap:7px;flex-wrap:wrap}
+  .stock-quote strong{font-size:24px}
+  .stock-quote span,.stock-quote em{font-size:12px}
+  .stock-card-reason{padding:3px 9px}
+  .stock-card-reason b{font-size:12px}
+  .stock-card-reason span{font-size:10px;line-height:1.45;-webkit-line-clamp:3}
+  .stock-card-reason small{font-size:9px}
+  .stock-trade-side{min-width:72px;padding:9px 5px}
+  .stock-trade-side strong{font-size:14px}
+  .stock-trade-side span{font-size:9px}
+  .stock-card>.stock-action{min-width:72px;height:48px;padding:0 5px;font-size:12px}
+  .stock-metrics{margin-top:16px}
+}
+
+@media(max-width:420px){
+  .stock-card{grid-template-columns:minmax(96px,.95fr) minmax(0,1.15fr) 76px}
+  .stock-action{margin-top:0}
+}
