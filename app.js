@@ -109,7 +109,7 @@ function signalLabel(signal) {
 function tradeSide(signal) {
   const action = signal?.action || '';
   if (action === 'add' || action === 'd_add' || action === 'wait_add') {
-    return { label: '\u4f4e\u5438', tone: 'low-buy' };
+    return { label: '\u5efa\u8bae\u52a0\u4ed3', tone: 'low-buy' };
   }
   if (action === 'clear' || action.startsWith('reduce') || action.startsWith('exit')) {
     return { label: '\u9ad8\u629b', tone: 'high-sell' };
