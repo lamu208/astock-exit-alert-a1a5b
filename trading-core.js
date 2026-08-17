@@ -644,6 +644,15 @@
     return confirmed ? { confirmed: true, support } : none;
   }
 
+  function isMa5CloseHeld(indicators, current, shrink, confirmed) {
+    const ma5 = indicators?.ma5;
+    if (!confirmed || !shrink || !indicators?.bullishAlignment || !Number.isFinite(ma5) || ma5 <= 0 || !current) return false;
+    return current.close >= ma5
+      && current.close <= ma5 * 1.03
+      && current.low <= ma5 * 1.015
+      && current.low >= ma5 * 0.96;
+  }
+
   function detectDAdd(indicators) {
     const bars = indicators.series;
     if (bars.length < 25 || !indicators.current || indicators.current.close <= indicators.current.open) return false;
@@ -810,8 +819,11 @@
       && (current.close - current.open) / touchedSupport.value >= 0.01
       && candleRange > 0
       && (current.close - current.low) / candleRange >= 0.55;
+    const ma5CloseHeldCandidate = isMa5CloseHeld(indicators, current, shrink, true);
+    const ma5CloseHeld = ma5CloseHeldCandidate && isConfirmed;
     const pullbackShape = patterns.currentShape.hammer || patterns.bullishEngulfing || supportTurnStrength;
-    const pullbackWarning = shrink && (nearMa5 || nearMa10 || nearMa20) && pullbackShape;
+    const pullbackWarning = (shrink && (nearMa5 || nearMa10 || nearMa20) && pullbackShape)
+      || (ma5CloseHeldCandidate && !isConfirmed);
     const supportRecovered = Boolean(touchedSupport)
       && shrink
       && indicators.bullishAlignment
@@ -822,7 +834,7 @@
     const previousPullbackConfirmed = previousPullback.confirmed
       && current.close > current.open
       && current.close > pullbackPrevious.close;
-    const pullbackConfirmed = previousPullbackConfirmed || supportRecovered;
+    const pullbackConfirmed = previousPullbackConfirmed || supportRecovered || ma5CloseHeld;
     const trendBreakout = current.close > indicators.previousHigh20 && expandedVolume && indicators.bullishAlignment;
     const previousHigh5 = indicators.prior.length >= 5
       ? Math.max(...indicators.prior.slice(-5).map((bar) => bar.high))
@@ -851,16 +863,22 @@
     if (volumePriceUp) addCandidates.push(makeSignal('add', 'volume_price_up', '趋势确认·上涨放量（建议加仓）', `MA5>MA10>MA20且价格站在MA5上方，量比${entryVolumeRatio.toFixed(2)}（${volumeLevel(entryVolumeRatio)}），趋势获得量价确认`, { scope: 'entry', priority: VOLUME_PRICE_PRIORITIES.risingVolume, details: { mode: 'volume_price', entryMode: 'breakout', rank: 0 } }));
     if (trendBreakout) addCandidates.push(makeSignal('add', 'entry_breakout', '①趋势突破·第1档建仓（40%）', `突破20日新高并达到5日均量${entryVolumeRatio.toFixed(2)}倍，MA5>MA10>MA20；止损设在突破K线最低点${current.low.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.trendBreakout, details: { mode: 'breakout', entryMode: 'breakout', allocation: '40%', stop: current.low, rank: 2 } }));
     if (pullbackConfirmed) {
-      const confirmedSupport = touchedSupport || previousPullback.support || supportLevels[1];
+      const confirmedSupport = ma5CloseHeld ? supportLevels[0] : touchedSupport || previousPullback.support || supportLevels[1];
       const pullbackAllocation = confirmedSupport.label === 'MA5' ? '25%' : confirmedSupport.label === 'MA10' ? '20%' : '15%';
-      const pullbackReason = supportRecovered
-        ? `缩量回踩${touchedSupport.label}后收阳并回收支撑，止跌重新转强`
-        : '前一日缩量回踩MA5/MA10/MA20并出现锤子线或吞没形态，今日重新转强';
+      const pullbackReason = ma5CloseHeld
+        ? '缩量回踩MA5，盘中触及或短暂下探后收盘重新站上MA5，按MA5不破确认'
+        : supportRecovered
+          ? `缩量回踩${touchedSupport.label}后收阳并回收支撑，止跌重新转强`
+          : '前一日缩量回踩MA5/MA10/MA20并出现锤子线或吞没形态，今日重新转强';
       addCandidates.push(makeSignal('add', 'entry_pullback_confirmed', `②回踩确认·第2档加仓（${pullbackAllocation}）`, `${pullbackReason}；回踩${confirmedSupport.label}不破，加仓${pullbackAllocation}，止损设在支撑位${confirmedSupport.value.toFixed(indicators.priceDigits)}下方1%-2%`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackConfirmed, details: { mode: 'pullback', entryMode: 'pullback', allocation: pullbackAllocation, rank: 1, support: confirmedSupport.label } }));
     }
     else if (pullbackWarning) {
-      const waitAllocation = touchedSupport.label === 'MA5' ? '25%' : touchedSupport.label === 'MA10' ? '20%' : '15%';
-      addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '②回踩确认候选·等待重新转强', `缩量触及${touchedSupport.label}并出现锤子线或吞没形态，等待重新转强后再加仓${waitAllocation}`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackWaiting, confirmed: false, details: { mode: 'pullback', entryMode: 'pullback', allocation: waitAllocation, rank: 1, support: touchedSupport.label } }));
+      const waitingSupport = ma5CloseHeldCandidate ? supportLevels[0] : touchedSupport;
+      const waitAllocation = waitingSupport.label === 'MA5' ? '25%' : waitingSupport.label === 'MA10' ? '20%' : '15%';
+      const waitReason = ma5CloseHeldCandidate
+        ? '盘中缩量回踩MA5并重新站上，等待收盘确认MA5不破'
+        : `缩量触及${waitingSupport.label}并出现锤子线或吞没形态，等待重新转强`;
+      addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '②回踩确认候选·等待重新转强', `${waitReason}后再加仓${waitAllocation}`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackWaiting, confirmed: false, details: { mode: 'pullback', entryMode: 'pullback', allocation: waitAllocation, rank: 1, support: waitingSupport.label } }));
     }
     if (localBreakout) addCandidates.push(makeSignal('add', 'entry_local_breakout', '第3档加仓（15%）', `放量突破近5日高点${previousHigh5.toFixed(indicators.priceDigits)}且多头排列保持；止损设在MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.localBreakout, details: { mode: 'local_breakout', entryMode: 'reversal', allocation: '15%', stop: indicators.ma10, rank: 3 } }));
     if (reversal) addCandidates.push(makeSignal('add', 'entry_reversal', '③反转形态·第3档加仓（15%）', `早晨星后突破20日前高，当日量为5日均量${entryVolumeRatio.toFixed(2)}倍且高于前日，止损设在MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.reversal, details: { mode: 'reversal', entryMode: 'reversal', allocation: '15%', stop: indicators.ma10, rank: 3 } }));
@@ -983,6 +1001,7 @@
     candleShape,
     isBullishEngulfing,
     isMorningStar,
+    isMa5CloseHeld,
     isPairedPriceTop,
     detectPairedPriceTop,
     isKlineDoubleTop,
