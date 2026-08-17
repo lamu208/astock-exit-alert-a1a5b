@@ -8,7 +8,7 @@
     hold: { label: '持有观望', tone: 'hold', priority: 100 },
     hold_no_sell: { label: '不卖观察', tone: 'hold', priority: 120 },
     add: { label: '建议加仓', tone: 'add', priority: 400 },
-    d_add: { label: 'D档加仓候选', tone: 'add', priority: 390 },
+    d_add: { label: 'D档加仓', tone: 'add', priority: 390 },
     wait_add: { label: '等待加仓确认', tone: 'warning', priority: 440 },
     warning: { label: '警示观察', tone: 'warning', priority: 500 },
     reduce_30: { label: '减仓30%', tone: 'reduce', priority: 710 },
@@ -45,7 +45,7 @@
             ['① 动能减弱', '缩量跌破MA5 → 仅观察，不卖'],
             ['② 趋势转弱', '缩量跌破MA10 → 暂不动作；放量跌破MA10 → 警示观察'],
             ['③ 趋势破坏', '放量跌破MA20 → 减仓30%-50%；缩量跌破 → 先观察'],
-            ['④ 结构破坏', '放量跌破20日前低/关键支撑 → 继续减仓'],
+            ['④ 结构破坏', '放量跌破前期突破平台/关键支撑 → 继续减仓'],
             ['⑤ 趋势反转', 'MA5下穿MA10并持续走弱，量价确认后按纪律离场']
           ]
         }
@@ -74,14 +74,14 @@
           items: [
             ['缩量破MA5', '观察，不卖'],
             ['放量破MA5且收盘未收回', '减仓30%'],
-            ['破位后2-3根K线不创新低', '反弹收阳后列为D档候选']
+            ['破位后2-3根K线不创新低', '反弹补仓（D档加仓）']
           ]
         },
         {
           title: '3. K线与形态',
           items: [
             ['长上影 + 前一日大阳线 + 放量', '减仓50%-60%'],
-            ['价格对子顶（仅阶段前高/新高）', '明显上涨后，尾数对子 + 放量长上影 + 3日未收回 → 出60%-70%；反弹途中对子不提示'],
+            ['价格对子顶（仅历史新高）', '明显上涨后，尾数对子最高价严格创可用历史新高 + 放量长上影 + 3日未收回 → 出60%-70%；未创新高和反弹途中均不提示'],
             ['K线M头双顶', '与价格对子分开识别，仅作结构警示，再按趋势线和量能确认'],
             ['极端长上影线', '立即清仓']
           ]
@@ -305,13 +305,13 @@
       const prior = bars.slice(0, candidateIndex);
       if (prior.length < 20) continue;
       const stage = prior.slice(-120);
-      const stageHigh = Math.max(...stage.map((bar) => bar.high));
+      const historicalHigh = Math.max(...prior.map((bar) => bar.high));
       const stageLow = Math.min(...stage.map((bar) => bar.low));
       const riseFromStageLow = stageLow > 0 ? candidate.high / stageLow - 1 : 0;
-      const atStageHigh = stageHigh > 0 && candidate.high >= stageHigh * 0.98;
+      const isHistoricalHigh = historicalHigh > 0 && candidate.high > historicalHigh;
 
-      // 价格对子只认明显上涨后冲击阶段前高/新高；回调反弹途中一律不生成对子提示。
-      if (!atStageHigh || riseFromStageLow < riseThreshold) continue;
+      // 价格对子只认明显上涨后严格创可用历史新高；未创新高或回调反弹途中一律不提示。
+      if (!isHistoricalHigh || riseFromStageLow < riseThreshold) continue;
 
       const shape = candleShape(candidate, securityType);
       const rejectionRate = candidate.high > 0 ? (candidate.high - candidate.close) / candidate.high : 0;
@@ -343,7 +343,7 @@
         longUpper: shape.longUpper,
         doji: shape.doji,
         riseFromStageLow,
-        stageHigh
+        historicalHigh
       };
     }
 
@@ -621,7 +621,7 @@
       const volumeReason = pairedPrice.historicalVolumeHigh
         ? '对子日成交量创可用历史新高'
         : `对子日成交量达到前5日均量的${pairedPrice.volumeRatio.toFixed(2)}倍`;
-      signals.push(makeSignal('exit_60_70', 'paired_price_top_confirmed', '阶段前高价格对子顶·已确认', `明显上涨后在阶段前高/新高${pairedPrice.price.toFixed(indicators.priceDigits)}形成价格对子、放量长上影，随后3个交易日未收回；${volumeReason}，按纪律出60%-70%`, { confirmed: true }));
+      signals.push(makeSignal('exit_60_70', 'paired_price_top_confirmed', '历史新高价格对子顶·已确认', `明显上涨后最高价${pairedPrice.price.toFixed(indicators.priceDigits)}形成价格对子并严格创可用历史新高，伴随放量长上影，随后3个交易日未收回；${volumeReason}，按纪律出60%-70%`, { confirmed: true }));
     } else if (pairedPrice.active) {
       const daysRemaining = Math.max(0, 3 - pairedPrice.age);
       const missing = [
@@ -632,11 +632,11 @@
       const waitingReason = pairedPrice.age < 3
         ? `仍需观察${daysRemaining}个交易日是否重新站上对子价`
         : `${missing.join('；') || '形态确认条件不足'}，不执行离场`;
-      signals.push(makeSignal('warning', 'paired_price_top_wait_confirmation', '阶段前高价格对子·等待确认', `明显上涨后在阶段前高/新高${pairedPrice.price.toFixed(indicators.priceDigits)}出现价格对子并冲高回落；${waitingReason}`, { confirmed: false, priority: 515 }));
+      signals.push(makeSignal('warning', 'paired_price_top_wait_confirmation', '历史新高价格对子·等待确认', `明显上涨后最高价${pairedPrice.price.toFixed(indicators.priceDigits)}形成价格对子并严格创可用历史新高；${waitingReason}`, { confirmed: false, priority: 515 }));
     }
     if (shapeExitEligible && patterns.currentShape.longUpper && patterns.previousBigBull && volume) signals.push(makeSignal('reduce_50_60', 'upper_after_big_bull', '大阳线后放量长上影', '前一日大阳线后出现放量长上影，按纪律减仓50%-60%', { confirmed: isConfirmed }));
     else if (shapeExitEligible && patterns.currentShape.longUpper && volume) signals.push(makeSignal('reduce_30', 'volume_long_upper', '放量长上影·减仓信号', '放量长上影显示资金兑现，按纪律缓慢减仓', { confirmed: isConfirmed }));
-    if (current.close < indicators.previousLow20 && volume) signals.push(makeSignal('reduce_30_50', 'key_support_break', '第四层·结构破坏', `放量跌破20日关键支撑${indicators.previousLow20.toFixed(indicators.priceDigits)}，继续减仓`));
+    if (current.close < indicators.previousLow20 && volume) signals.push(makeSignal('reduce_30_50', 'key_support_break', '第四层·结构破坏', `放量跌破前期突破平台/关键支撑${indicators.previousLow20.toFixed(indicators.priceDigits)}，继续减仓`));
 
     if (current.close < indicators.ma20) {
       if (volume) signals.push(makeSignal('reduce_30_50', 'ma20_break_volume', '第三层·趋势破坏', `量比${volumeRatio.toFixed(2)}放量跌破MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}`));
@@ -694,7 +694,7 @@
     else if (pullbackWarning) addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '回踩预警', '缩量触及MA10/MA20并出现止跌形态，等待次日确认', { scope: 'entry', confirmed: false, details: { mode: 'pullback' } }));
     if (reversal) addCandidates.push(makeSignal('add', 'entry_reversal', '第1档·反转形态', '早晨星后突破20日前高且成交量改善', { scope: 'entry', priority: 420, details: { mode: 'reversal' } }));
     if (oversoldBase) addCandidates.push(makeSignal(sectorStable ? 'add' : 'wait_add', 'entry_oversold', '超跌反弹候选', sectorStable ? '超跌、下跌衰减且板块企稳，仅建议≤20%小仓' : '超跌和下跌衰减成立，但板块企稳尚未确认', { scope: 'entry', confirmed: sectorStable, details: { mode: 'oversold' } }));
-    if (dAdd) addCandidates.push(makeSignal('d_add', 'entry_d_add', 'D档回补候选', '破位后2-3根K线未创新低且当前收阳；不计算具体数量', { scope: 'entry', details: { mode: 'd_add' } }));
+    if (dAdd) addCandidates.push(makeSignal('d_add', 'entry_d_add', '反弹补仓·D档加仓', '破位后2-3根K线不创新低，当前反弹收阳，按纪律执行D档加仓；不计算具体数量', { scope: 'entry', details: { mode: 'd_add' } }));
 
     const riskBlocksAdding = signals.some((signal) => signal.priority >= ACTIONS.warning.priority);
     addCandidates.forEach((candidate) => {
