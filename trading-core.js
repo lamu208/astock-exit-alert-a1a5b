@@ -554,7 +554,7 @@
           : '';
         signals.push(makeSignal('exit_60_70', 'kline_double_top_volume', 'K线双顶放量', `两峰价格接近、中间回撤≥3%且第二峰转弱；${volumeReason}${pairedReason}，按纪律出60%-70%`, { confirmed: isConfirmed }));
       } else {
-        signals.push(makeSignal('warning', 'kline_double_top_wait_volume', 'K线双顶待量能确认', '双顶结构成立，但当日成交量未创历史新高且未达到前5日均量1.3倍，先警示观察', { confirmed: false }));
+        signals.push(makeSignal('hold', 'kline_double_top_wait_volume', 'K线双顶候选·持有观察', '双顶结构仅为候选，当日量能未确认且尚未形成有效破位，持有观察，不减仓', { confirmed: false, priority: 115 }));
       }
     }
     if (shapeExitEligible && patterns.pairedPriceTop && volume) {
@@ -602,7 +602,7 @@
       premiumHot && 'ETF溢价率超过0.5%'
     ].filter(Boolean);
     const chaseBlocked = chaseReasons.length > 0;
-    if (chaseBlocked) signals.push(makeSignal('warning', 'no_chase', '禁止追高', `${chaseReasons.join('；')}，阻止新增仓位`, { scope: 'entry', priority: 610 }));
+    if (chaseBlocked) signals.push(makeSignal('hold', 'no_chase', '持有观望·禁止追高', `${chaseReasons.join('；')}，已有仓位可持有，但禁止新增仓位`, { scope: 'entry', priority: 110 }));
 
     const nearMa10 = indicators.ma10 > 0 && Math.abs(current.low - indicators.ma10) / indicators.ma10 < 0.015;
     const nearMa20 = indicators.ma20 > 0 && Math.abs(current.low - indicators.ma20) / indicators.ma20 < 0.015;
