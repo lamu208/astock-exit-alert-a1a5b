@@ -30,7 +30,7 @@
   };
 
   const VOLUME_PRICE_PRIORITIES = {
-    risingVolume: 480,
+    risingVolume: 420,
     stagnation: 520,
     fallingShrink: 170,
     risingShrink: 160
@@ -93,7 +93,7 @@
       title: '💼 离场纪律与决策优先级',
       groups: [
         {
-          title: '1. 量价关系判断（优先级最高）',
+          title: '1. 趋势优先，量价确认',
           items: [
             ['上涨放量', '趋势确认（可加仓）'],
             ['上涨缩量', '可持有（不追高）'],
@@ -776,9 +776,9 @@
         : makeSignal('hold_no_sell', 'ma10_break_no_volume', '跌破MA10暂不动作', '未放量，按纪律暂不卖出'));
     }
 
-    if (rising && shrink) signals.push(makeSignal('hold', 'volume_price_up_shrink', '量价优先·上涨缩量', '上涨缩量，可持有但不追高', { priority: VOLUME_PRICE_PRIORITIES.risingShrink }));
-    if (falling && shrink) signals.push(makeSignal('hold_no_sell', 'volume_price_down_shrink', '量价优先·下跌缩量', '下跌缩量属于正常回踩，观察MA5/MA10/MA20支撑', { priority: VOLUME_PRICE_PRIORITIES.fallingShrink }));
-    if (patterns.stagnant) signals.push(makeSignal('warning', 'volume_stagnation', '量价优先·放量滞涨', '量比≥1.3、涨幅不足1%且接近前高，警惕高位换手', { priority: VOLUME_PRICE_PRIORITIES.stagnation }));
+    if (rising && shrink) signals.push(makeSignal('hold', 'volume_price_up_shrink', '趋势完整·上涨缩量', '趋势线完整，上涨缩量可持有但不追高', { priority: VOLUME_PRICE_PRIORITIES.risingShrink }));
+    if (falling && shrink) signals.push(makeSignal('hold_no_sell', 'volume_price_down_shrink', '回踩观察·下跌缩量', '下跌缩量属于正常回踩，继续判断MA5/MA10/MA20支撑是否收回', { priority: VOLUME_PRICE_PRIORITIES.fallingShrink }));
+    if (patterns.stagnant) signals.push(makeSignal('warning', 'volume_stagnation', '量价警示·放量滞涨', '量比≥1.3、涨幅不足1%且接近前高，警惕高位换手', { priority: VOLUME_PRICE_PRIORITIES.stagnation }));
 
     const stockDeviationLimit = indicators.securityType === 'ETF' ? 0.12 : 0.10;
     const sectorWeak = indicators.securityType === 'STOCK' && indicators.change > 0.02 && finiteNumber(context.sectorChange) < 0;
@@ -790,7 +790,6 @@
       market.highVolume && '大盘高位放量'
     ].filter(Boolean);
     const chaseBlocked = chaseReasons.length > 0;
-    if (chaseBlocked) signals.push(makeSignal('hold', 'no_chase', '持有观望·禁止追高', `${chaseReasons.join('；')}，已有仓位可持有，但禁止新增仓位`, { scope: 'entry', priority: 110 }));
 
     const supportLevels = [
       { label: 'MA5', value: indicators.ma5 },
@@ -804,18 +803,20 @@
     const nearMa5 = touchedSupport?.label === 'MA5';
     const nearMa10 = touchedSupport?.label === 'MA10';
     const nearMa20 = touchedSupport?.label === 'MA20';
-    const pullbackShape = patterns.currentShape.hammer || patterns.bullishEngulfing;
-    const pullbackWarning = shrink && (nearMa5 || nearMa10 || nearMa20) && pullbackShape;
     const candleRange = current.high - current.low;
-    const supportRecovered = Boolean(touchedSupport)
-      && shrink
-      && indicators.bullishAlignment
-      && pullbackShape
+    const supportTurnStrength = Boolean(touchedSupport)
       && current.close > current.open
       && current.close >= touchedSupport.value
       && (current.close - current.open) / touchedSupport.value >= 0.01
       && candleRange > 0
       && (current.close - current.low) / candleRange >= 0.55;
+    const pullbackShape = patterns.currentShape.hammer || patterns.bullishEngulfing || supportTurnStrength;
+    const pullbackWarning = shrink && (nearMa5 || nearMa10 || nearMa20) && pullbackShape;
+    const supportRecovered = Boolean(touchedSupport)
+      && shrink
+      && indicators.bullishAlignment
+      && pullbackShape
+      && supportTurnStrength;
     const pullbackPrevious = indicators.prior.at(-1);
     const previousPullback = previousPullbackSetup(indicators);
     const previousPullbackConfirmed = previousPullback.confirmed
@@ -835,7 +836,7 @@
       && current.close > current.open
       && indicators.bullishAlignment
       && expandedVolume;
-    const volumePriceUp = rising && expandedVolume && current.close >= indicators.ma5;
+    const volumePriceUp = rising && expandedVolume && current.close >= indicators.ma5 && indicators.bullishAlignment;
     const reversal = patterns.morningStar
       && current.close > indicators.previousHigh20
       && entryVolumeRatio >= 1.3
@@ -847,7 +848,7 @@
     const sectorStable = context.sectorStable === true;
     const dAdd = detectDAdd(indicators);
     const addCandidates = [];
-    if (volumePriceUp) addCandidates.push(makeSignal('add', 'volume_price_up', '量价优先·上涨放量（建议加仓）', `上涨且量比${entryVolumeRatio.toFixed(2)}（${volumeLevel(entryVolumeRatio)}），MA5趋势线完整，趋势获得量价确认`, { scope: 'entry', priority: VOLUME_PRICE_PRIORITIES.risingVolume, details: { mode: 'volume_price', entryMode: 'breakout', rank: 0 } }));
+    if (volumePriceUp) addCandidates.push(makeSignal('add', 'volume_price_up', '趋势确认·上涨放量（建议加仓）', `MA5>MA10>MA20且价格站在MA5上方，量比${entryVolumeRatio.toFixed(2)}（${volumeLevel(entryVolumeRatio)}），趋势获得量价确认`, { scope: 'entry', priority: VOLUME_PRICE_PRIORITIES.risingVolume, details: { mode: 'volume_price', entryMode: 'breakout', rank: 0 } }));
     if (trendBreakout) addCandidates.push(makeSignal('add', 'entry_breakout', '①趋势突破·第1档建仓（40%）', `突破20日新高并达到5日均量${entryVolumeRatio.toFixed(2)}倍，MA5>MA10>MA20；止损设在突破K线最低点${current.low.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.trendBreakout, details: { mode: 'breakout', entryMode: 'breakout', allocation: '40%', stop: current.low, rank: 2 } }));
     if (pullbackConfirmed) {
       const confirmedSupport = touchedSupport || previousPullback.support || supportLevels[1];
@@ -873,6 +874,7 @@
       : marketStatus === 'bull' ? 100 : marketStatus === 'sideways' ? 60 : marketStatus === 'bear' ? 20 : 0;
     const blockedByMarket = [];
     let addedByMarket = false;
+    let chaseOverrideUsed = false;
     addCandidates.forEach((candidate) => {
       const entryMode = candidate.details.entryMode || 'breakout';
       const marketAllowed = marketStatus === 'bull'
@@ -882,7 +884,13 @@
         blockedByMarket.push(candidate);
         return;
       }
-      if (chaseBlocked || riskBlocksAdding) return;
+      const chaseExempt = candidate.ruleId === 'entry_pullback_confirmed' || candidate.ruleId === 'entry_d_add';
+      if ((chaseBlocked && !chaseExempt) || riskBlocksAdding) return;
+      if (chaseBlocked && chaseExempt) {
+        candidate.reason += '；该信号属于支撑位确认回踩/回补，不按追高信号硬拦截';
+        candidate.details.chaseOverride = true;
+        chaseOverrideUsed = true;
+      }
       candidate.details.marketStatus = marketStatus;
       candidate.details.positionCap = marketPositionCap;
       if (marketStatus === 'sideways') candidate.reason += '；大盘震荡，总仓位不得超过60%';
@@ -890,6 +898,7 @@
       signals.push(candidate);
       addedByMarket = true;
     });
+    if (chaseBlocked && !chaseOverrideUsed) signals.push(makeSignal('hold', 'no_chase', '持有观望·禁止追高', `${chaseReasons.join('；')}，已有仓位可持有，但禁止新增仓位`, { scope: 'entry', priority: 110 }));
     if (blockedByMarket.length && !addedByMarket && !riskBlocksAdding && !chaseBlocked) {
       const title = marketStatus === 'bear'
         ? '大盘总闸·空头市场暂停①②③'
@@ -912,7 +921,7 @@
       indicators,
       patterns,
       market,
-      blocked: chaseBlocked,
+      blocked: chaseBlocked && !chaseOverrideUsed,
       primary: resolved.primary,
       secondary: resolved.secondary,
       signals: resolved.all
