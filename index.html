@@ -71,6 +71,17 @@
           <button id="pause-refresh" class="secondary-button" type="button"><span>▮▮</span> 暂停</button>
           <button id="refresh-now" class="secondary-button" type="button"><span>↻</span> 立即刷新</button>
         </div>
+        <div class="control-row provider-row">
+          <label for="fuyao-api-key">同花顺直连</label>
+          <div class="api-key-field">
+            <input id="fuyao-api-key" type="password" autocomplete="off" placeholder="输入新 API Key（仅保存在本设备）" aria-label="同花顺金融数据 API Key">
+            <small id="fuyao-key-status">未设置时自动使用东方财富、腾讯</small>
+          </div>
+          <div class="provider-actions">
+            <button id="save-fuyao-key" class="secondary-button" type="button">保存</button>
+            <button id="clear-fuyao-key" class="secondary-button compact-button" type="button">清除</button>
+          </div>
+        </div>
       </section>
 
       <div id="alert-banner" class="alert-banner hidden" role="status" aria-live="polite"></div>
