@@ -352,10 +352,10 @@
     if (eastValid && tencentValid) {
       const difference = priceDifference(east.value, tencent.value);
       if (difference > 0.005) throw Object.assign(new Error(`两路最新价差异${(difference * 100).toFixed(2)}%，停止误判`), { errors });
-      return { value: east.value, verification_source: 'tencent', fallback: false, errors };
+      return { value: tencent.value, verification_source: 'eastmoney', fallback: false, errors };
     }
-    if (eastValid) return { value: east.value, verification_source: null, fallback: false, errors };
-    if (tencentValid) return { value: tencent.value, verification_source: null, fallback: true, errors };
+    if (tencentValid) return { value: tencent.value, verification_source: null, fallback: false, errors };
+    if (eastValid) return { value: east.value, verification_source: null, fallback: true, errors };
     throw Object.assign(new Error('东方财富与腾讯实时行情均不可用'), { errors });
   }
 
