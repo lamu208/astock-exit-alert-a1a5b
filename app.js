@@ -17,7 +17,8 @@ const WATCHLIST_KEY = 'a-share-exit-watchlist';
 const API_META = document.querySelector('meta[name="market-api-base"]')?.content || '';
 const API_BASE = location.hostname.endsWith('.netlify.app') ? '' : API_META;
 const API_URL = `${API_BASE}/api/state`;
-const PREFER_DIRECT = ['127.0.0.1', 'localhost'].includes(location.hostname);
+const PREFER_DIRECT = location.hostname.endsWith('.github.io')
+  || ['127.0.0.1', 'localhost'].includes(location.hostname);
 const $ = (selector) => document.querySelector(selector);
 
 function escapeHtml(value) {
