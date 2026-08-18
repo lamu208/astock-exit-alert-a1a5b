@@ -88,6 +88,7 @@ function parseHistory(payload, symbol, name = '') {
     name: payload?.data?.name || name || digits(symbol),
     source: 'eastmoney',
     source_label: '东方财富',
+    adjustment: 'qfq',
     bars
   };
 }
@@ -96,7 +97,7 @@ async function fetchHistory(symbol, options = {}) {
   let lastError;
   for (const secid of eastmoneySecIds(symbol)) {
     try {
-      const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=0&lmt=120&end=20500101`;
+      const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&lmt=120&end=20500101`;
       const payload = await getJson(url, options);
       return parseHistory(payload, symbol);
     } catch (error) {

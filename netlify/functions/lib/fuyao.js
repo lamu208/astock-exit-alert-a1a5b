@@ -133,6 +133,7 @@ function parseHistory(data, symbol, options = {}) {
     name: options.name || digits(symbol),
     source: 'fuyao',
     source_label: '扶摇同花顺',
+    adjustment: options.securityType === 'STOCK' ? 'qfq' : 'none',
     bars
   };
 }

@@ -12,6 +12,13 @@ const PROVIDERS = [
   { name: 'tongdaxin', client: tongdaxin }
 ];
 
+const HISTORY_PROVIDERS = [
+  { name: 'tencent', client: tencent },
+  { name: 'eastmoney', client: eastmoney },
+  { name: 'fuyao', client: fuyao },
+  { name: 'tongdaxin', client: tongdaxin }
+];
+
 const symbolCache = new Map();
 
 function finite(value, fallback = NaN) {
@@ -153,8 +160,7 @@ function historyMatchesQuote(history, quoteRecord, tolerance = 0.005) {
 
 async function fetchBestHistory(symbol, quoteRecord, options = {}) {
   const errors = [];
-  const providers = providersFrom(quoteRecord.source);
-  for (const provider of providers) {
+  for (const provider of HISTORY_PROVIDERS) {
     const result = await settle(
       () => provider.client.fetchHistory(symbol, optionsFor(provider.name, options)),
       provider.name
@@ -170,7 +176,7 @@ async function fetchBestHistory(symbol, quoteRecord, options = {}) {
     return {
       ok: true,
       value: result.value,
-      fallback: provider.name !== quoteRecord.source,
+      fallback: provider.name !== HISTORY_PROVIDERS[0].name,
       errors
     };
   }
@@ -253,6 +259,7 @@ async function fetchMarketData(symbol, options = {}) {
     fetched_at: fetchedAt,
     verification_source: null,
     history_source: historyResult.value.source,
+    history_adjustment: historyResult.value.adjustment || 'unknown',
     daily_bars: historyResult.value.bars,
     data_quality: {
       valid: true,

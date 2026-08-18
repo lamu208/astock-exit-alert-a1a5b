@@ -211,6 +211,9 @@ function stockCard(stock) {
   const side = tradeSide(signal);
   const metrics = metricPairs(stock).map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
   const source = stock.source_label || (stock.source === 'eastmoney' ? '东方财富' : stock.source === 'tencent' ? '腾讯备用' : '无可用来源');
+  const historySource = stock.history_source
+    ? ` · 日K：${stock.history_source === 'tencent' ? '腾讯' : stock.history_source === 'eastmoney' ? '东方财富' : stock.history_source}${stock.history_adjustment === 'qfq' ? '前复权' : ''}`
+    : '';
   return `
     <article class="stock-card tone-${escapeHtml(signal.tone)}" data-key="${escapeHtml(stockKey(stock))}" tabindex="0">
       <button class="stock-remove" type="button" data-remove="${escapeHtml(stockKey(stock))}" aria-label="移除${escapeHtml(stock.name)}">×</button>
@@ -219,7 +222,7 @@ function stockCard(stock) {
       <div class="stock-card-reason ${escapeHtml(signal.tone)}"><b>${escapeHtml(summary.title)}</b><span>${escapeHtml(summary.reason)}</span><small>${escapeHtml(summary.side)}</small></div>
       <div class="stock-trade-side ${escapeHtml(side.tone)}"><strong>${escapeHtml(side.label)}</strong><span>${escapeHtml(signal.label)}</span></div>
       <div class="stock-metrics">${metrics}</div>
-      <div class="stock-source">${escapeHtml(source)} · ${escapeHtml(formatTime(stock.source_time))}${stock.data_quality?.fallback ? ' · 已启用备用源' : ''}</div>
+      <div class="stock-source">${escapeHtml(source)}${escapeHtml(historySource)} · ${escapeHtml(formatTime(stock.source_time))}${stock.data_quality?.fallback ? ' · 已启用备用源' : ''}</div>
     </article>`;
 }
 
@@ -334,7 +337,7 @@ async function fetchPayload(watchlist) {
     } catch {}
   }
   try {
-    const payload = await fetchWithTimeout(`${API_URL}?watchlist=${query}&_=${Date.now()}`, 14000);
+    const payload = await fetchWithTimeout(`${API_URL}?watchlist=${query}&_=${Date.now()}`, 5000);
     if (!Array.isArray(payload.stocks)) throw new Error(payload.error || '云端返回格式无效');
     return payload;
   } catch (error) {

@@ -79,7 +79,7 @@ function parseHistory(raw, symbol) {
   const payload = typeof raw === 'string' ? parseJsonAssignment(raw) : raw;
   const key = tencentKey(symbol);
   const entry = payload?.data?.[key] || {};
-  const rows = Array.isArray(entry.day) && entry.day.length ? entry.day : entry.qfqday || [];
+  const rows = Array.isArray(entry.qfqday) && entry.qfqday.length ? entry.qfqday : entry.day || [];
   const bars = (Array.isArray(rows) ? rows : []).map((row) => ({
     date: String(row[0] || ''),
     open: finite(row[1]),
@@ -90,7 +90,7 @@ function parseHistory(raw, symbol) {
     amount: finite(row[6], 0)
   })).filter((bar) => [bar.open, bar.close, bar.high, bar.low, bar.volume].every(Number.isFinite) && bar.close > 0);
   if (bars.length < 20) throw new UpstreamError('tencent_history_short', '腾讯历史K线不足20日', { count: bars.length });
-  return { symbol: exchangeSymbol(symbol), source: 'tencent', source_label: '腾讯', bars };
+  return { symbol: exchangeSymbol(symbol), source: 'tencent', source_label: '腾讯', adjustment: 'qfq', bars };
 }
 
 async function fetchHistory(symbol, options = {}) {

@@ -28,7 +28,10 @@ function usedSources(stocks, market) {
   const sources = new Set();
   for (const item of [market, ...(stocks || [])]) {
     if (item?.source && item.source !== 'none') sources.add(item.source_label || item.source);
-    if (item?.history_source && item.history_source !== item.source) sources.add(item.history_source);
+    if (item?.history_source) {
+      const adjustment = item.history_adjustment === 'qfq' ? '前复权' : '备用口径';
+      sources.add(`${item.history_source}日K（${adjustment}）`);
+    }
   }
   return [...sources];
 }

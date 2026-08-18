@@ -119,7 +119,7 @@
       };
     }).filter(validBar);
     if (bars.length < 20) throw new Error('东方财富历史K线不足20日');
-    return { symbol: exchangeSymbol(symbol), name: payload?.data?.name || name || digits(symbol), source: 'eastmoney', source_label: '东方财富', bars };
+    return { symbol: exchangeSymbol(symbol), name: payload?.data?.name || name || digits(symbol), source: 'eastmoney', source_label: '东方财富', adjustment: 'qfq', bars };
   }
 
   function parseTencentQuote(content, requestedSymbol = '') {
@@ -159,7 +159,7 @@
   function parseTencentHistory(payload, symbol) {
     const key = tencentKey(symbol);
     const entry = payload?.data?.[key] || {};
-    const rows = Array.isArray(entry.day) && entry.day.length ? entry.day : entry.qfqday || [];
+    const rows = Array.isArray(entry.qfqday) && entry.qfqday.length ? entry.qfqday : entry.day || [];
     const bars = (Array.isArray(rows) ? rows : []).map((row) => ({
       date: String(row[0] || ''),
       open: finite(row[1]),
@@ -170,7 +170,7 @@
       amount: finite(row[6], 0)
     })).filter(validBar);
     if (bars.length < 20) throw new Error('腾讯历史K线不足20日');
-    return { symbol: exchangeSymbol(symbol), source: 'tencent', source_label: '腾讯备用源', bars };
+    return { symbol: exchangeSymbol(symbol), source: 'tencent', source_label: '腾讯决策日K', adjustment: 'qfq', bars };
   }
 
   function validBar(bar) {
@@ -268,7 +268,7 @@
     let lastError;
     for (const secid of eastmoneySecIds(symbol)) {
       try {
-        const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=0&lmt=120&end=20500101`;
+        const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&lmt=120&end=20500101`;
         return parseEastmoneyHistory(await loadJsonp(url), symbol);
       } catch (error) { lastError = error; }
     }
@@ -373,14 +373,12 @@
   }
 
   async function fetchBestHistory(symbol, quoteRecord) {
-    const providers = quoteRecord.source === 'tencent'
-      ? [['tencent', fetchTencentHistory], ['eastmoney', fetchEastmoneyHistory]]
-      : [['eastmoney', fetchEastmoneyHistory], ['tencent', fetchTencentHistory]];
+    const providers = [['tencent', fetchTencentHistory], ['eastmoney', fetchEastmoneyHistory]];
     const errors = [];
     for (const [provider, operation] of providers) {
       try {
         const value = await operation(symbol);
-        if (historyMatchesQuote(value, quoteRecord)) return { value, fallback: provider !== quoteRecord.source, errors };
+        if (historyMatchesQuote(value, quoteRecord)) return { value, fallback: provider !== 'tencent', errors };
         const historyClose = historyPreviousClose(value, quoteRecord.source_time);
         errors.push({ provider, message: `历史昨收${finite(historyClose).toFixed(4)}与实时昨收${finite(quoteRecord.quote?.previous_close).toFixed(4)}不一致` });
       } catch (error) {
@@ -450,6 +448,7 @@
         fetched_at: now.toISOString(),
         verification_source: quoteResult.verification_source,
         history_source: historyResult.value.source,
+        history_adjustment: historyResult.value.adjustment || 'unknown',
         daily_bars: historyResult.value.bars,
         data_quality: {
           valid: true,
@@ -490,14 +489,17 @@
     const connected = stocks.filter((stock) => stock.data_quality?.valid).length;
     const validMarket = Boolean(market.data_quality?.valid);
     const status = connected === stocks.length && validMarket ? 'connected' : connected > 0 ? 'partial' : items.length === 0 && validMarket ? 'connected' : 'disconnected';
-    const usedTencent = [market, ...stocks].some((stock) => stock.source === 'tencent' || stock.history_source === 'tencent');
+    const realtimeSources = [...new Set([market, ...stocks]
+      .filter((stock) => stock.data_quality?.valid)
+      .map((stock) => stock.source_label || stock.source)
+      .filter(Boolean))];
     return {
       version: '2.1.0-direct',
       generated_at: now.toISOString(),
       status,
       connected_count: connected,
       total_count: stocks.length,
-      data_source: usedTencent ? '浏览器直连：东方财富主源 / 腾讯备用源' : '浏览器直连：东方财富',
+      data_source: `浏览器直连：实时${realtimeSources.join(' / ') || '行情'} · 决策日K前复权（腾讯优先）`,
       monitor_mode: 'page_open_only',
       transport: 'direct',
       market,

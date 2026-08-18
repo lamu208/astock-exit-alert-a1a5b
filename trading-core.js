@@ -257,7 +257,13 @@
     });
     if (!validBar(current)) return bars;
     const last = bars.at(-1);
-    if (last && last.date && sourceDate && last.date === sourceDate) bars[bars.length - 1] = current;
+    if (last && last.date && sourceDate && last.date === sourceDate) {
+      bars[bars.length - 1] = {
+        ...current,
+        volume: Number.isFinite(last.volume) && last.volume > 0 ? last.volume : current.volume,
+        amount: Number.isFinite(last.amount) && last.amount > 0 ? last.amount : current.amount
+      };
+    }
     else bars.push(current);
     return bars;
   }
@@ -540,9 +546,11 @@
     if (!quality.valid || indicators.series.length < 25) return { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: `${quality.missing.join('、') || '大盘数据不足'}，暂停新增仓位` };
     const ma20FiveDaysAgo = movingAverage(indicators.series, 20, 5);
     const slope = ma20FiveDaysAgo > 0 ? (indicators.ma20 / ma20FiveDaysAgo - 1) / 5 : 0;
+    const ma20NeutralBand = 0.005;
+    const ma20Distance = indicators.current.close / indicators.ma20 - 1;
     let status = 'sideways';
-    if (indicators.current.close > indicators.ma20 && indicators.ma5 > indicators.ma10) status = 'bull';
-    else if (indicators.current.close < indicators.ma20) status = 'bear';
+    if (ma20Distance > ma20NeutralBand && indicators.ma5 > indicators.ma10) status = 'bull';
+    else if (ma20Distance < -ma20NeutralBand) status = 'bear';
     const shapes = indicators.series.slice(-3).map((bar) => candleShape(bar, 'STOCK'));
     const lastThree = indicators.series.slice(-3);
     const volumeIncreasingDeclines = lastThree.length === 3
@@ -573,6 +581,8 @@
       highVolume,
       slope,
       ma20: indicators.ma20,
+      ma20Distance,
+      ma20NeutralBand,
       positionCap,
       allowedModes,
       reason: risk ? `${statusReason}；同时触发大盘风险，禁止追高` : statusReason

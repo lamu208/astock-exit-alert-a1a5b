@@ -129,6 +129,7 @@ function parseHistory(payload, symbol, options = {}, converter) {
     name: options.name || digits(symbol),
     source: 'tongdaxin',
     source_label: '通达信',
+    adjustment: 'unknown',
     bars
   };
 }
