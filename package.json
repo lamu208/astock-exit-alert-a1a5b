@@ -1,1 +1,12 @@
-۟󊗬
+{
+  "name": "astock-exit-alert",
+  "version": "2.2.0",
+  "private": true,
+  "description": "A-share monitoring gateway with ordered market-data fallbacks",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "node-tdx-market": "^0.2.0"
+  }
+}
