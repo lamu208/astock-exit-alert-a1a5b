@@ -241,6 +241,7 @@
       };
       script.async = true;
       script.charset = options.charset || 'utf-8';
+      if (options.referrerPolicy) script.referrerPolicy = options.referrerPolicy;
       script.src = url;
       script.onerror = () => finish(new Error(options.errorMessage || '腾讯浏览器直连失败'));
       script.onload = () => root.setTimeout(() => {
@@ -284,9 +285,26 @@
   async function fetchTencentHistory(symbol) {
     const key = tencentKey(symbol);
     if (!key) throw new Error('腾讯证券代码无效');
-    const variableName = `__astock_kline_${Date.now()}_${requestSequence += 1}`;
-    const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${key},day,,,120,qfq&_var=${variableName}`;
-    return parseTencentHistory(await loadVariableScript(url, variableName, { errorMessage: '腾讯历史K线失败' }), symbol);
+    const endpoints = [
+      'https://proxy.finance.qq.com/ifzqgtimg/appstock/app/newfqkline/get',
+      'https://proxy.finance.qq.com/ifzqgtimg/appstock/app/fqkline/get',
+      'https://ifzq.gtimg.cn/appstock/app/fqkline/get'
+    ];
+    let lastError;
+    for (const endpoint of endpoints) {
+      const variableName = `__astock_kline_${Date.now()}_${requestSequence += 1}`;
+      const url = `${endpoint}?param=${key},day,,,120,qfq&_var=${variableName}`;
+      try {
+        const payload = await loadVariableScript(url, variableName, {
+          errorMessage: '腾讯历史K线失败',
+          referrerPolicy: 'no-referrer'
+        });
+        return parseTencentHistory(payload, symbol);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error('腾讯历史K线失败');
   }
 
   function marketIsOpen(value = new Date()) {
