@@ -69,13 +69,31 @@ function saveFuyaoApiKey(value) {
   else localStorage.removeItem(FUYAO_KEY_STORAGE);
 }
 
+function fuyaoFailureReason(payload) {
+  const records = [payload?.market, ...(payload?.stocks || [])].filter(Boolean);
+  const providerErrors = records.flatMap((record) => record.data_quality?.errors || [])
+    .filter((error) => error?.provider === 'fuyao')
+    .map((error) => String(error?.message || '').trim())
+    .filter(Boolean);
+  const missingReasons = records.flatMap((record) => record.data_quality?.missing || [])
+    .map((message) => String(message || '').trim())
+    .filter((message) => /同花顺|fuyao|api key|2001|2003|权限|额度|差异|超时/i.test(message));
+  const raw = providerErrors[0] || missingReasons[0] || '';
+  if (!raw) return '未返回有效行情';
+  if (/2001|missing.*api|api key.*无效|invalid.*key|登录态已失效/i.test(raw)) return 'API Key 无效或已失效';
+  if (/2003|无权|权限|capability/i.test(raw)) return 'API Key 未开通行情权限';
+  if (/额度|quota|rate.?limit|too many/i.test(raw)) return 'API 调用额度不足';
+  if (/abort|timeout|超时/i.test(raw)) return '网络请求超时';
+  return raw.length > 60 ? `${raw.slice(0, 60)}…` : raw;
+}
+
 function renderFuyaoKeyStatus(payload = state.payload) {
   const element = $('#fuyao-key-status');
   if (!element) return;
   const key = loadFuyaoApiKey();
   element.className = '';
   if (!key) {
-    element.textContent = '未设置时自动使用东方财富、腾讯';
+    element.textContent = '本设备未保存 API Key，当前使用东方财富、腾讯';
     return;
   }
   const records = [payload?.market, ...(payload?.stocks || [])].filter(Boolean);
@@ -86,7 +104,11 @@ function renderFuyaoKeyStatus(payload = state.payload) {
   }
   if (payload) {
     element.classList.add('fallback');
-    element.textContent = '同花顺暂不可用，已自动切换东方财富、腾讯';
+    const activeSources = [...new Set(records
+      .filter((record) => record.data_quality?.valid)
+      .map((record) => record.source === 'tencent' ? '腾讯' : record.source === 'eastmoney' ? '东方财富' : '')
+      .filter(Boolean))];
+    element.textContent = `同花顺失败：${fuyaoFailureReason(payload)}；当前使用${activeSources.join('、') || '备用行情'}`;
     return;
   }
   element.textContent = '已保存，刷新后验证同花顺连接';
