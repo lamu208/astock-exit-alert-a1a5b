@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="market-api-base" content="https://subtle-palmier-6ca45c.netlify.app">
   <link rel="manifest" href="./manifest.webmanifest">
-  <title>���ܶ���</title>
+  <title>智能盯盘</title>
   <link rel="stylesheet" href="./styles.css?v=20260817-panel1">
 </head>
 <body>
@@ -18,73 +18,73 @@
         <div class="brand-block">
           <i class="brand-logo" aria-hidden="true"></i>
           <div>
-            <h1>���ܶ���</h1>
-            <p>���ܼ� / �� / ��ּ�������</p>
+            <h1>智能盯盘</h1>
+            <p>智能加 / 减 / 清仓纪律助手</p>
           </div>
         </div>
         <div class="header-status">
-          <div id="data-status" class="connection-state loading"><i></i><span>ˢ����...</span></div>
+          <div id="data-status" class="connection-state loading"><i></i><span>刷新中...</span></div>
           <span class="status-divider">|</span>
-          <span id="header-refresh-time">�ȴ�����</span>
-          <span id="market-state" class="market-state unknown">����δȷ��</span>
+          <span id="header-refresh-time">等待更新</span>
+          <span id="market-state" class="market-state unknown">大盘未确认</span>
         </div>
-        <button id="discipline-button" class="discipline-button" type="button">����</button>
+        <button id="discipline-button" class="discipline-button" type="button">纪律</button>
       </header>
 
-      <section class="control-panel" aria-label="���̿���">
+      <section class="control-panel" aria-label="盯盘控制">
         <form id="add-form" class="control-row add-row">
-          <label for="stock-input">���ӹ�Ʊ</label>
-          <input id="stock-input" autocomplete="off" placeholder="��������ƣ����� 600000 / �뵼��ETF" aria-label="��Ʊ��ETF���������">
-          <button class="primary-button" type="submit">����</button>
+          <label for="stock-input">添加股票</label>
+          <input id="stock-input" autocomplete="off" placeholder="代码或名称，例如 600000 / 半导体ETF" aria-label="股票或ETF代码或名称">
+          <button class="primary-button" type="submit">添加</button>
         </form>
         <div class="control-row refresh-row">
-          <label for="refresh-interval">ˢ�¼��</label>
-          <select id="refresh-interval" aria-label="ˢ�¼��">
-            <option value="15">15 ��</option>
-            <option value="30" selected>30 ��</option>
-            <option value="60">60 ��</option>
-            <option value="120">2 ����</option>
+          <label for="refresh-interval">刷新间隔</label>
+          <select id="refresh-interval" aria-label="刷新间隔">
+            <option value="15">15 秒</option>
+            <option value="30" selected>30 秒</option>
+            <option value="60">60 秒</option>
+            <option value="120">2 分钟</option>
           </select>
-          <button id="pause-refresh" class="secondary-button" type="button"><span>??</span> ��ͣ</button>
-          <button id="refresh-now" class="secondary-button" type="button"><span>?</span> ����ˢ��</button>
+          <button id="pause-refresh" class="secondary-button" type="button"><span>▮▮</span> 暂停</button>
+          <button id="refresh-now" class="secondary-button" type="button"><span>↻</span> 立即刷新</button>
         </div>
       </section>
 
       <div id="alert-banner" class="alert-banner hidden" role="status" aria-live="polite"></div>
       <section id="watchlist" class="stock-list empty-state" aria-live="polite">
-        <strong>��û����ѡ��</strong>
-        <span>�����Ʊ��ETF����/���ƿ�ʼ����</span>
+        <strong>还没有自选股</strong>
+        <span>输入股票或ETF代码/名称开始盯盘</span>
       </section>
-      <p id="last-refresh" class="refresh-time">��δˢ�� �� ��Ѱ������ҳ��ʱ�������</p>
+      <p id="last-refresh" class="refresh-time">尚未刷新 · 免费版仅在网页打开时持续监控</p>
     </section>
 
     <section id="discipline-view" class="page-view discipline-page" hidden>
       <header class="discipline-topbar">
-        <div><span>���ܶ���</span><strong>����˵��</strong></div>
-        <button id="back-watch" type="button">���ض���</button>
+        <div><span>智能盯盘</span><strong>纪律说明</strong></div>
+        <button id="back-watch" type="button">返回盯盘</button>
       </header>
       <div id="discipline-content"></div>
     </section>
   </main>
 
   <div id="detail-sheet" class="sheet-backdrop" aria-hidden="true">
-    <section class="detail-sheet" role="dialog" aria-modal="true" aria-label="��Ʊ����">
+    <section class="detail-sheet" role="dialog" aria-modal="true" aria-label="股票详情">
       <div class="sheet-handle"></div>
       <header class="sheet-header">
-        <div><p id="detail-code" class="stock-code">��</p><h2 id="detail-name">��</h2></div>
-        <button id="close-detail" class="close-button" type="button" aria-label="�ر�����">��</button>
+        <div><p id="detail-code" class="stock-code">—</p><h2 id="detail-name">—</h2></div>
+        <button id="close-detail" class="close-button" type="button" aria-label="关闭详情">×</button>
       </header>
-      <div id="detail-decision" class="decision-card">������...</div>
+      <div id="detail-decision" class="decision-card">加载中...</div>
       <section class="quote-card">
-        <div><span>���¼�</span><strong id="detail-price">��</strong></div>
-        <div><span>�ǵ���</span><strong id="detail-change">��</strong></div>
-        <div><span>���ն���</span><strong id="detail-action">��</strong></div>
+        <div><span>最新价</span><strong id="detail-price">—</strong></div>
+        <div><span>涨跌幅</span><strong id="detail-change">—</strong></div>
+        <div><span>最终动作</span><strong id="detail-action">—</strong></div>
       </section>
-      <section class="detail-section"><h3>�ؼ�����ָ��</h3><div id="detail-metrics" class="metric-grid"></div></section>
-      <p id="detail-source" class="detail-source">��</p>
-      <section class="detail-section"><h3>�Ӳ� / ���� / �볡ԭ��</h3><div id="detail-reasons" class="reason-list"></div></section>
-      <section class="detail-section muted-note"><p>Ԥ�����ڼ������ѣ�������Ͷ�ʽ��飻�����������ճ��������������ߡ�</p></section>
-      <button id="remove-detail-stock" class="remove-stock" type="button">����ѡ���Ƴ�</button>
+      <section class="detail-section"><h3>关键行情指标</h3><div id="detail-metrics" class="metric-grid"></div></section>
+      <p id="detail-source" class="detail-source">—</p>
+      <section class="detail-section"><h3>加仓 / 减仓 / 离场原因</h3><div id="detail-reasons" class="reason-list"></div></section>
+      <section class="detail-section muted-note"><p>预警用于纪律提醒，不构成投资建议；请结合自身风险承受能力独立决策。</p></section>
+      <button id="remove-detail-stock" class="remove-stock" type="button">从自选股移除</button>
     </section>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -94,4 +94,3 @@
   <script src="./app.js?v=20260817-panel3"></script>
 </body>
 </html>
-
