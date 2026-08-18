@@ -14,6 +14,7 @@ const state = {
 };
 
 const WATCHLIST_KEY = 'a-share-exit-watchlist';
+const FUYAO_KEY_STORAGE = 'a-share-fuyao-api-key-v1';
 const API_META = document.querySelector('meta[name="market-api-base"]')?.content || '';
 const API_BASE = location.hostname.endsWith('.netlify.app') ? '' : API_META;
 const API_URL = `${API_BASE}/api/state`;
@@ -52,6 +53,43 @@ function loadWatchlist() {
 
 function saveWatchlist(items) {
   localStorage.setItem(WATCHLIST_KEY, JSON.stringify(normalizeWatchlist(items)));
+}
+
+function loadFuyaoApiKey() {
+  try {
+    return String(localStorage.getItem(FUYAO_KEY_STORAGE) || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function saveFuyaoApiKey(value) {
+  const key = String(value || '').trim();
+  if (key) localStorage.setItem(FUYAO_KEY_STORAGE, key);
+  else localStorage.removeItem(FUYAO_KEY_STORAGE);
+}
+
+function renderFuyaoKeyStatus(payload = state.payload) {
+  const element = $('#fuyao-key-status');
+  if (!element) return;
+  const key = loadFuyaoApiKey();
+  element.className = '';
+  if (!key) {
+    element.textContent = '未设置时自动使用东方财富、腾讯';
+    return;
+  }
+  const records = [payload?.market, ...(payload?.stocks || [])].filter(Boolean);
+  if (records.some((record) => record.source === 'fuyao')) {
+    element.classList.add('connected');
+    element.textContent = '同花顺国内直连已启用；密钥仅保存在本设备';
+    return;
+  }
+  if (payload) {
+    element.classList.add('fallback');
+    element.textContent = '同花顺暂不可用，已自动切换东方财富、腾讯';
+    return;
+  }
+  element.textContent = '已保存，刷新后验证同花顺连接';
 }
 
 function formatNumber(value) {
@@ -211,7 +249,7 @@ function stockCard(stock) {
   const summary = reasonSummary(stock);
   const side = tradeSide(signal);
   const metrics = metricPairs(stock).map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
-  const source = stock.source_label || (stock.source === 'eastmoney' ? '东方财富' : stock.source === 'tencent' ? '腾讯备用' : '无可用来源');
+  const source = stock.source_label || (stock.source === 'fuyao' ? '同花顺国内直连' : stock.source === 'eastmoney' ? '东方财富' : stock.source === 'tencent' ? '腾讯直连' : '无可用来源');
   const historySource = stock.history_source
     ? ` · 日K：${stock.history_source === 'tencent' ? '腾讯' : stock.history_source === 'eastmoney' ? '东方财富' : stock.history_source}${stock.history_adjustment === 'qfq' ? '前复权' : ''}`
     : '';
@@ -330,10 +368,11 @@ async function fetchWithTimeout(url, timeoutMs = 18000) {
 
 async function fetchPayload(watchlist) {
   const query = encodeURIComponent(JSON.stringify(watchlist));
+  const directOptions = { fuyaoApiKey: loadFuyaoApiKey() };
   let apiError;
   if (PREFER_DIRECT && directMarket?.fetchState) {
     try {
-      const payload = await directMarket.fetchState(watchlist);
+      const payload = await directMarket.fetchState(watchlist, directOptions);
       if (Array.isArray(payload.stocks) && payload.status !== 'disconnected') return payload;
     } catch {}
   }
@@ -345,7 +384,7 @@ async function fetchPayload(watchlist) {
     apiError = error;
   }
   if (!directMarket?.fetchState) throw apiError;
-  const payload = await directMarket.fetchState(watchlist);
+  const payload = await directMarket.fetchState(watchlist, directOptions);
   if (!Array.isArray(payload.stocks)) throw apiError;
   payload.gateway_warning = '云函数不可用，已自动切换浏览器直连行情';
   return payload;
@@ -363,6 +402,7 @@ async function refresh() {
     state.lastSuccess = payload.generated_at || new Date().toISOString();
     evaluatePayload(payload);
     migrateResolvedNames();
+    renderFuyaoKeyStatus(payload);
     render();
     announceSignals();
     const selected = selectedStock();
@@ -454,9 +494,30 @@ $('#back-watch').addEventListener('click', () => setView('watch'));
 $('#refresh-now').addEventListener('click', refresh);
 $('#pause-refresh').addEventListener('click', () => setPaused(!state.paused));
 $('#refresh-interval').addEventListener('change', scheduleRefresh);
+$('#save-fuyao-key').addEventListener('click', () => {
+  const input = $('#fuyao-api-key');
+  const key = input.value.trim();
+  if (!key) {
+    showToast('请输入新的同花顺 API Key');
+    return;
+  }
+  saveFuyaoApiKey(key);
+  input.value = '';
+  renderFuyaoKeyStatus(null);
+  showToast('同花顺 API Key 已安全保存在本设备');
+  refresh();
+});
+$('#clear-fuyao-key').addEventListener('click', () => {
+  saveFuyaoApiKey('');
+  $('#fuyao-api-key').value = '';
+  renderFuyaoKeyStatus(null);
+  showToast('已清除本设备的同花顺 API Key');
+  refresh();
+});
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.paused) refresh(); });
 
 renderDiscipline();
+renderFuyaoKeyStatus(null);
 render();
 scheduleRefresh();
 refresh();
