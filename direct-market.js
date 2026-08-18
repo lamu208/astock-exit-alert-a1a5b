@@ -4,6 +4,7 @@
   root.DirectMarket = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createDirectMarket(root) {
   const REQUEST_TIMEOUT = 6500;
+  const FUYAO_BASE_URL = 'https://fuyao.aicubes.cn';
   let requestSequence = 0;
 
   function finite(value, fallback = NaN) {
@@ -52,6 +53,11 @@
   function securityTypeOf(value, name = '') {
     const code = digits(value);
     return /ETF|LOF|基金/i.test(name) || /^(15|16|50|51|52|56|58|59)\d{4}$/.test(code) ? 'ETF' : 'STOCK';
+  }
+
+  function assetFamily(symbol, options = {}) {
+    if (options.isIndex || options.securityType === 'INDEX') return 'index';
+    return (options.securityType || securityTypeOf(symbol, options.name)) === 'ETF' ? 'fund' : 'stock';
   }
 
   function sourceTime(value) {
@@ -141,7 +147,7 @@
       market: marketOf(symbol),
       security_type: securityTypeOf(code, name),
       source: 'tencent',
-      source_label: '腾讯备用源',
+      source_label: '腾讯直连',
       source_time: parseTencentSourceTime(values[30]),
       quote: {
         price,
@@ -171,6 +177,72 @@
     })).filter(validBar);
     if (bars.length < 20) throw new Error('腾讯历史K线不足20日');
     return { symbol: exchangeSymbol(symbol), source: 'tencent', source_label: '腾讯决策日K', adjustment: 'qfq', bars };
+  }
+
+  function shanghaiDate(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  }
+
+  function parseFuyaoQuote(data, symbol, options = {}) {
+    const item = Array.isArray(data?.item) ? data.item[0] : null;
+    const normalizedSymbol = exchangeSymbol(item?.thscode || symbol);
+    const code = digits(normalizedSymbol);
+    const price = finite(item?.last_price);
+    const previousClose = finite(item?.prev_price);
+    const open = finite(item?.open_price);
+    const high = finite(item?.high_price);
+    const low = finite(item?.low_price);
+    if (!code || ![price, previousClose, open, high, low].every((value) => Number.isFinite(value) && value > 0)) {
+      throw new Error('同花顺实时行情字段不完整');
+    }
+    const name = String(options.name || item?.name || code);
+    return {
+      symbol: normalizedSymbol,
+      name,
+      market: marketOf(normalizedSymbol),
+      security_type: options.isIndex ? 'INDEX' : securityTypeOf(normalizedSymbol, name),
+      source: 'fuyao',
+      source_label: '同花顺国内直连',
+      source_time: sourceTime(data?.timestamp || options.now),
+      quote: {
+        price,
+        previous_close: previousClose,
+        open,
+        high,
+        low,
+        volume: finite(item?.volume, 0),
+        amount: finite(item?.turnover, 0),
+        change_pct: finite(item?.price_change_ratio_pct, 0) / 100
+      }
+    };
+  }
+
+  function parseFuyaoHistory(data, symbol, options = {}) {
+    const rows = Array.isArray(data?.item) ? data.item : [];
+    const bars = rows.map((item) => ({
+      date: shanghaiDate(finite(item?.date_ms)),
+      open: finite(item?.open_price),
+      close: finite(item?.close_price),
+      high: finite(item?.high_price),
+      low: finite(item?.low_price),
+      volume: finite(item?.volume),
+      amount: finite(item?.turnover, 0)
+    })).filter((bar) => bar.date && validBar(bar)).sort((left, right) => left.date.localeCompare(right.date));
+    if (bars.length < 20) throw new Error('同花顺历史K线不足20日');
+    return {
+      symbol: exchangeSymbol(symbol),
+      name: options.name || digits(symbol),
+      source: 'fuyao',
+      source_label: '同花顺国内直连日K',
+      adjustment: data?.adjust === 'forward' ? 'qfq' : 'none',
+      bars
+    };
   }
 
   function validBar(bar) {
@@ -251,6 +323,72 @@
       const timer = setTimeout(() => finish(new Error(options.timeoutMessage || '腾讯浏览器直连超时')), options.timeoutMs || REQUEST_TIMEOUT);
       root.document.head.appendChild(script);
     });
+  }
+
+  async function fetchJson(url, options = {}) {
+    if (typeof root.fetch !== 'function') throw new Error('当前环境不支持同花顺直连');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs || REQUEST_TIMEOUT);
+    try {
+      const response = await root.fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        headers: options.headers || {},
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error(`同花顺 HTTP ${response.status}`);
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function requestFuyao(path, params, options = {}) {
+    const key = String(options.fuyaoApiKey || '').trim();
+    if (!key) throw new Error('同花顺 API Key 未设置');
+    const query = new URLSearchParams(params).toString();
+    const payload = await fetchJson(`${FUYAO_BASE_URL}${path}?${query}`, {
+      headers: { accept: 'application/json', 'X-api-key': key }
+    });
+    if (finite(payload?.code, NaN) !== 0) throw new Error(payload?.message || '同花顺接口返回错误');
+    return payload?.data || {};
+  }
+
+  async function fetchFuyaoQuote(symbol, options = {}) {
+    const thscode = exchangeSymbol(symbol);
+    const family = assetFamily(thscode, options);
+    const endpoint = family === 'index'
+      ? '/api/a-share-index/prices/snapshot'
+      : family === 'fund'
+        ? '/api/fund/market/snapshot'
+        : '/api/a-share/prices/snapshot';
+    const params = family === 'fund' ? { thscode } : { thscodes: thscode };
+    const data = await requestFuyao(endpoint, params, options);
+    return parseFuyaoQuote(data, thscode, options);
+  }
+
+  async function fetchFuyaoHistory(symbol, options = {}) {
+    const thscode = exchangeSymbol(symbol);
+    const family = assetFamily(thscode, options);
+    const endpoint = family === 'index'
+      ? '/api/a-share-index/prices/historical'
+      : family === 'fund'
+        ? '/api/fund/market/historical'
+        : '/api/a-share/prices/historical';
+    const end = options.now instanceof Date ? options.now.getTime() : new Date(options.now || Date.now()).getTime();
+    const params = {
+      thscode,
+      interval: '1d',
+      start: String(end - 400 * 24 * 60 * 60 * 1000),
+      end: String(end)
+    };
+    if (family === 'stock') {
+      params.adjust = 'forward';
+      params.offset = '0';
+    }
+    const data = await requestFuyao(endpoint, params, options);
+    return parseFuyaoHistory(data, thscode, options);
   }
 
   async function fetchEastmoneyQuote(symbol) {
@@ -341,20 +479,36 @@
     catch (error) { return { ok: false, provider, error }; }
   }
 
-  async function fetchBestQuote(symbol, now = new Date()) {
-    const [east, tencent] = await Promise.all([
+  async function fetchBestQuote(symbol, now = new Date(), options = {}) {
+    const fuyaoKey = String(options.fuyaoApiKey || '').trim();
+    const results = await Promise.all([
+      ...(fuyaoKey ? [settled('fuyao', () => fetchFuyaoQuote(symbol, { ...options, now }))] : []),
       settled('eastmoney', () => fetchEastmoneyQuote(symbol)),
       settled('tencent', () => fetchTencentQuote(symbol))
     ]);
-    const errors = [east, tencent].filter((result) => !result.ok).map((result) => ({ provider: result.provider, message: result.error?.message || '请求失败' }));
+    const fuyao = results.find((result) => result.provider === 'fuyao');
+    const east = results.find((result) => result.provider === 'eastmoney');
+    const tencent = results.find((result) => result.provider === 'tencent');
+    const errors = results.filter((result) => !result.ok).map((result) => ({ provider: result.provider, message: result.error?.message || '请求失败' }));
+    const fuyaoValid = fuyao?.ok && validQuote(fuyao.value) && isFresh(fuyao.value, now);
     const eastValid = east.ok && validQuote(east.value) && isFresh(east.value, now);
     const tencentValid = tencent.ok && validQuote(tencent.value) && isFresh(tencent.value, now);
+    if (fuyaoValid) {
+      const verifier = tencentValid ? tencent : eastValid ? east : null;
+      if (verifier) {
+        const difference = priceDifference(fuyao.value, verifier.value);
+        if (difference > 0.005) throw Object.assign(new Error(`同花顺与${verifier.provider === 'tencent' ? '腾讯' : '东方财富'}最新价差异${(difference * 100).toFixed(2)}%，停止误判`), { errors });
+        if ((!fuyao.value.name || fuyao.value.name === digits(symbol)) && verifier.value.name) fuyao.value.name = verifier.value.name;
+      }
+      return { value: fuyao.value, verification_source: verifier?.provider || null, fallback: false, errors };
+    }
+    const fallback = Boolean(fuyaoKey);
     if (eastValid && tencentValid) {
       const difference = priceDifference(east.value, tencent.value);
       if (difference > 0.005) throw Object.assign(new Error(`两路最新价差异${(difference * 100).toFixed(2)}%，停止误判`), { errors });
-      return { value: tencent.value, verification_source: 'eastmoney', fallback: false, errors };
+      return { value: tencent.value, verification_source: 'eastmoney', fallback, errors };
     }
-    if (tencentValid) return { value: tencent.value, verification_source: null, fallback: false, errors };
+    if (tencentValid) return { value: tencent.value, verification_source: null, fallback, errors };
     if (eastValid) return { value: east.value, verification_source: null, fallback: true, errors };
     throw Object.assign(new Error('东方财富与腾讯实时行情均不可用'), { errors });
   }
@@ -372,8 +526,11 @@
     return historyClose > 0 && previousClose > 0 && Math.abs(historyClose - previousClose) / Math.max(historyClose, previousClose) <= tolerance;
   }
 
-  async function fetchBestHistory(symbol, quoteRecord) {
-    const providers = [['tencent', fetchTencentHistory], ['eastmoney', fetchEastmoneyHistory]];
+  async function fetchBestHistory(symbol, quoteRecord, options = {}) {
+    const fuyaoKey = String(options.fuyaoApiKey || '').trim();
+    const providers = fuyaoKey
+      ? [['fuyao', (value) => fetchFuyaoHistory(value, { ...options, securityType: quoteRecord.security_type })], ['tencent', fetchTencentHistory], ['eastmoney', fetchEastmoneyHistory]]
+      : [['tencent', fetchTencentHistory], ['eastmoney', fetchEastmoneyHistory]];
     const errors = [];
     for (const [provider, operation] of providers) {
       try {
@@ -438,9 +595,9 @@
     const raw = typeof item === 'string' ? item : item?.symbol || item?.name || '';
     try {
       const resolved = await resolveSymbol(raw);
-      const quoteResult = await fetchBestQuote(resolved.symbol, now);
+      const quoteResult = await fetchBestQuote(resolved.symbol, now, options);
       const quoteRecord = quoteResult.value;
-      const historyResult = await fetchBestHistory(resolved.symbol, quoteRecord);
+      const historyResult = await fetchBestHistory(resolved.symbol, quoteRecord, options);
       return {
         ...quoteRecord,
         name: options.name || resolved.name || quoteRecord.name,
@@ -483,8 +640,8 @@
     const now = options.now instanceof Date ? options.now : new Date(options.now || Date.now());
     const items = (Array.isArray(watchlist) ? watchlist : []).slice(0, 30);
     const [market, stocks] = await Promise.all([
-      fetchInstrument('000001.SH', { now, name: '上证指数', watchKey: 'MARKET:000001.SH' }),
-      mapLimit(items, 5, (item) => fetchInstrument(item, { now, watchKey: typeof item === 'string' ? item : item?.symbol || item?.name || '' }))
+      fetchInstrument('000001.SH', { ...options, now, name: '上证指数', isIndex: true, securityType: 'INDEX', watchKey: 'MARKET:000001.SH' }),
+      mapLimit(items, 5, (item) => fetchInstrument(item, { ...options, now, watchKey: typeof item === 'string' ? item : item?.symbol || item?.name || '' }))
     ]);
     const connected = stocks.filter((stock) => stock.data_quality?.valid).length;
     const validMarket = Boolean(market.data_quality?.valid);
@@ -499,7 +656,7 @@
       status,
       connected_count: connected,
       total_count: stocks.length,
-      data_source: `浏览器直连：实时${realtimeSources.join(' / ') || '行情'} · 决策日K前复权（腾讯优先）`,
+      data_source: `浏览器直连：实时${realtimeSources.join(' / ') || '行情'} · 日K按同一优先链自动校验`,
       monitor_mode: 'page_open_only',
       transport: 'direct',
       market,
@@ -519,6 +676,8 @@
     parseEastmoneyHistory,
     parseTencentQuote,
     parseTencentHistory,
+    parseFuyaoQuote,
+    parseFuyaoHistory,
     parseEastmoneySuggestions,
     parseTencentSearch,
     marketIsOpen,
