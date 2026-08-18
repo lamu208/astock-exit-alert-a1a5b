@@ -17,7 +17,7 @@ const WATCHLIST_KEY = 'a-share-exit-watchlist';
 const API_META = document.querySelector('meta[name="market-api-base"]')?.content || '';
 const API_BASE = location.hostname.endsWith('.netlify.app') ? '' : API_META;
 const API_URL = `${API_BASE}/api/state`;
-const PREFER_DIRECT = location.hostname.endsWith('.github.io') || ['127.0.0.1', 'localhost'].includes(location.hostname);
+const PREFER_DIRECT = ['127.0.0.1', 'localhost'].includes(location.hostname);
 const $ = (selector) => document.querySelector(selector);
 
 function escapeHtml(value) {
@@ -334,7 +334,7 @@ async function fetchPayload(watchlist) {
     } catch {}
   }
   try {
-    const payload = await fetchWithTimeout(`${API_URL}?watchlist=${query}&_=${Date.now()}`, 4500);
+    const payload = await fetchWithTimeout(`${API_URL}?watchlist=${query}&_=${Date.now()}`, 14000);
     if (!Array.isArray(payload.stocks)) throw new Error(payload.error || '云端返回格式无效');
     return payload;
   } catch (error) {
