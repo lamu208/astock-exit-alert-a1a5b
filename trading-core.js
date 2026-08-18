@@ -539,10 +539,33 @@
     };
   }
 
+  function dailyMarketDecisionData(marketData) {
+    const bars = (marketData?.daily_bars || []).map(normalizeBar).filter(validBar);
+    if (bars.length < 2) return marketData;
+    const current = bars.at(-1);
+    const previous = bars.at(-2);
+    return {
+      ...marketData,
+      source_time: `${current.date}T15:00:00+08:00`,
+      quote: {
+        ...(marketData.quote || {}),
+        price: current.close,
+        previous_close: previous.close,
+        open: current.open,
+        high: current.high,
+        low: current.low,
+        volume: current.volume,
+        amount: current.amount
+      },
+      daily_bars: bars
+    };
+  }
+
   function evaluateMarketEnvironment(marketData) {
     if (!marketData) return { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: '大盘数据不可用，暂停新增仓位' };
-    const indicators = calculateIndicators(marketData);
-    const quality = validateMarketData(marketData, indicators);
+    const decisionData = dailyMarketDecisionData(marketData);
+    const indicators = calculateIndicators(decisionData);
+    const quality = validateMarketData(decisionData, indicators);
     if (!quality.valid || indicators.series.length < 25) return { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: `${quality.missing.join('、') || '大盘数据不足'}，暂停新增仓位` };
     const ma20FiveDaysAgo = movingAverage(indicators.series, 20, 5);
     const slope = ma20FiveDaysAgo > 0 ? (indicators.ma20 / ma20FiveDaysAgo - 1) / 5 : 0;
@@ -583,6 +606,8 @@
       ma20: indicators.ma20,
       ma20Distance,
       ma20NeutralBand,
+      basis: 'daily_bars',
+      asOf: indicators.current?.date || '',
       positionCap,
       allowedModes,
       reason: risk ? `${statusReason}；同时触发大盘风险，禁止追高` : statusReason
