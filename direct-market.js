@@ -17,6 +17,18 @@
     return match ? match[0] : '';
   }
 
+  const INDEX_DEFINITIONS = Object.freeze([
+    { symbol: '000001.SH', name: '上证指数', aliases: ['上证指数', '上证综指', '沪指'] },
+    { symbol: '399001.SZ', name: '深证成指', aliases: ['深证成指', '深成指'] },
+    { symbol: '399006.SZ', name: '创业板指', aliases: ['创业板指', '创业板指数'] },
+    { symbol: '000300.SH', name: '沪深300', aliases: ['沪深300', '沪深300指数'] },
+    { symbol: '000016.SH', name: '上证50', aliases: ['上证50', '上证50指数'] },
+    { symbol: '000905.SH', name: '中证500', aliases: ['中证500', '中证500指数'] },
+    { symbol: '000688.SH', name: '科创50', aliases: ['科创50', '科创50指数'] },
+    { symbol: '000852.SH', name: '中证1000', aliases: ['中证1000', '中证1000指数'] },
+    { symbol: '899050.BJ', name: '北证50', aliases: ['北证50', '北证50指数'] }
+  ]);
+
   function explicitMarket(value) {
     const match = String(value || '').match(/(?:\.|^)(SH|SZ|BJ)$/i);
     return match ? match[1].toUpperCase() : '';
@@ -50,7 +62,30 @@
     return code ? `${marketOf(value).toLowerCase()}${code}` : '';
   }
 
+  function normalizeIndexKey(value) {
+    return String(value || '').trim().replace(/^INDEX:/i, '').replace(/\s+/g, '').toUpperCase();
+  }
+
+  function resolveKnownIndex(value) {
+    const original = String(value || '').trim();
+    if (!original) return null;
+    const key = normalizeIndexKey(original);
+    const code = digits(key);
+    const definition = INDEX_DEFINITIONS.find((item) => (
+      item.symbol === key
+      || item.aliases.some((alias) => normalizeIndexKey(alias) === key)
+      || (code && code !== '000001' && !explicitMarket(key) && digits(item.symbol) === code)
+      || (/^INDEX:/i.test(original) && code && digits(item.symbol) === code)
+    ));
+    if (definition) return { ...definition, security_type: 'INDEX', is_index: true };
+    if (/^INDEX:/i.test(original) && code && explicitMarket(key)) {
+      return { symbol: `${code}.${explicitMarket(key)}`, name: `${code}指数`, aliases: [], security_type: 'INDEX', is_index: true };
+    }
+    return null;
+  }
+
   function securityTypeOf(value, name = '') {
+    if (resolveKnownIndex(value) || resolveKnownIndex(name) || /指数|成指|沪指|创业板指|科创50|北证50/i.test(name)) return 'INDEX';
     const code = digits(value);
     return /ETF|LOF|基金/i.test(name) || /^(15|16|50|51|52|56|58|59)\d{4}$/.test(code) ? 'ETF' : 'STOCK';
   }
@@ -558,6 +593,8 @@
 
   async function resolveSymbol(item) {
     const raw = typeof item === 'string' ? item : item?.symbol || item?.name || '';
+    const knownIndex = resolveKnownIndex(raw);
+    if (knownIndex) return knownIndex;
     const code = digits(raw);
     if (code) return { symbol: exchangeSymbol(raw), name: '', security_type: securityTypeOf(code) };
     const query = String(raw).replace(/^NAME:/, '').trim();
@@ -573,12 +610,14 @@
 
   function unavailableRecord(item, error, now = new Date()) {
     const raw = typeof item === 'string' ? item : item?.symbol || item?.name || '';
+    const knownIndex = resolveKnownIndex(raw);
     const code = digits(raw);
-    const name = String(raw).replace(/^NAME:/, '') || code || '未知标的';
+    const name = knownIndex?.name || String(raw).replace(/^(?:NAME|INDEX):/i, '') || code || '未知标的';
     const upstreamDetails = (error?.errors || []).map((entry) => `${entry.provider || '上游'}：${entry.message || '请求失败'}`);
     return {
-      symbol: code ? exchangeSymbol(raw) : String(raw),
+      symbol: knownIndex?.symbol || (code ? exchangeSymbol(raw) : String(raw)),
       name,
+      security_type: knownIndex ? 'INDEX' : securityTypeOf(raw, name),
       watch_key: String(raw),
       source: 'none',
       source_label: '浏览器直连失败',
@@ -595,12 +634,20 @@
     const raw = typeof item === 'string' ? item : item?.symbol || item?.name || '';
     try {
       const resolved = await resolveSymbol(raw);
-      const quoteResult = await fetchBestQuote(resolved.symbol, now, options);
+      const instrumentOptions = {
+        ...options,
+        name: options.name || resolved.name,
+        securityType: options.securityType || resolved.security_type,
+        isIndex: Boolean(options.isIndex || resolved.is_index || resolved.security_type === 'INDEX')
+      };
+      const quoteResult = await fetchBestQuote(resolved.symbol, now, instrumentOptions);
       const quoteRecord = quoteResult.value;
-      const historyResult = await fetchBestHistory(resolved.symbol, quoteRecord, options);
+      const historyResult = await fetchBestHistory(resolved.symbol, quoteRecord, instrumentOptions);
       return {
         ...quoteRecord,
-        name: options.name || resolved.name || quoteRecord.name,
+        symbol: resolved.symbol,
+        name: instrumentOptions.name || quoteRecord.name,
+        security_type: instrumentOptions.isIndex ? 'INDEX' : (quoteRecord.security_type || resolved.security_type),
         watch_key: options.watchKey || String(raw),
         fetched_at: now.toISOString(),
         verification_source: quoteResult.verification_source,
@@ -665,12 +712,14 @@
   }
 
   return {
+    INDEX_DEFINITIONS,
     finite,
     digits,
     marketOf,
     exchangeSymbol,
     eastmoneySecIds,
     tencentKey,
+    resolveKnownIndex,
     securityTypeOf,
     parseEastmoneyQuote,
     parseEastmoneyHistory,
