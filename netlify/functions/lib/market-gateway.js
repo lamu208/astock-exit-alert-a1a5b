@@ -3,7 +3,7 @@ const eastmoney = require('./eastmoney');
 const tencent = require('./tencent');
 const tongdaxin = require('./tongdaxin');
 const { UpstreamError } = require('./http');
-const { digits, exchangeSymbol, marketOf, securityTypeOf, normalizeWatchItem } = require('./symbols');
+const { digits, exchangeSymbol, marketOf, resolveKnownIndex, securityTypeOf, normalizeWatchItem } = require('./symbols');
 
 const PROVIDERS = [
   { name: 'fuyao', client: fuyao },
@@ -190,6 +190,7 @@ async function fetchBestHistory(symbol, quoteRecord, options = {}) {
 
 async function fetchMarketData(symbol, options = {}) {
   const code = digits(symbol);
+  const normalizedSymbol = exchangeSymbol(symbol);
   const fetchedAt = new Date(options.now || Date.now()).toISOString();
   if (!code) {
     return {
@@ -209,18 +210,21 @@ async function fetchMarketData(symbol, options = {}) {
       }
     };
   }
+  const isIndex = Boolean(options.isIndex || resolveKnownIndex(symbol) || resolveKnownIndex(options.name));
+  const securityType = isIndex ? 'INDEX' : (options.securityType || securityTypeOf(normalizedSymbol, options.name));
   const requestOptions = {
     ...options,
     name: options.name,
-    securityType: options.securityType || securityTypeOf(code, options.name)
+    isIndex,
+    securityType
   };
-  const quoteResult = await fetchBestQuote(code, requestOptions);
+  const quoteResult = await fetchBestQuote(normalizedSymbol, requestOptions);
   if (!quoteResult.ok) {
     return {
-      symbol: exchangeSymbol(code),
+      symbol: normalizedSymbol,
       name: options.name || code,
-      market: marketOf(code),
-      security_type: options.isIndex ? 'INDEX' : securityTypeOf(code, options.name),
+      market: marketOf(normalizedSymbol),
+      security_type: securityType,
       source: 'none',
       fetched_at: fetchedAt,
       quote: {},
@@ -236,11 +240,13 @@ async function fetchMarketData(symbol, options = {}) {
     };
   }
   const quoteRecord = quoteResult.value;
-  const historyResult = await fetchBestHistory(code, quoteRecord, requestOptions);
+  const historyResult = await fetchBestHistory(normalizedSymbol, quoteRecord, requestOptions);
   if (!historyResult.ok) {
     return {
       ...quoteRecord,
+      symbol: normalizedSymbol,
       name: options.name || quoteRecord.name,
+      security_type: securityType,
       fetched_at: fetchedAt,
       daily_bars: [],
       data_quality: {
@@ -255,7 +261,9 @@ async function fetchMarketData(symbol, options = {}) {
   }
   return {
     ...quoteRecord,
+    symbol: normalizedSymbol,
     name: options.name || quoteRecord.name,
+    security_type: securityType,
     fetched_at: fetchedAt,
     verification_source: null,
     history_source: historyResult.value.source,
@@ -282,6 +290,15 @@ function bestSearchMatch(results, query) {
 }
 
 async function searchSymbol(query, options = {}) {
+  const knownIndex = resolveKnownIndex(query) || resolveKnownIndex(options.name);
+  if (knownIndex) {
+    return {
+      symbol: knownIndex.symbol,
+      name: options.name || knownIndex.name,
+      security_type: 'INDEX',
+      is_index: true
+    };
+  }
   const code = digits(query);
   const text = String(query || '').replace(/^NAME:/, '').trim();
   if (!text && !code) throw new UpstreamError('empty_search', '请输入股票代码或名称');
@@ -320,6 +337,8 @@ async function resolveWatchItem(item, options = {}) {
   return {
     ...resolved,
     name: normalized.name || resolved.name,
+    security_type: normalized.security_type || resolved.security_type,
+    is_index: Boolean(normalized.is_index || resolved.is_index || resolved.security_type === 'INDEX'),
     watch_key: normalized.symbol || resolved.symbol
   };
 }
@@ -347,7 +366,8 @@ async function fetchWatchlist(watchlist, options = {}) {
     const data = await fetchMarketData(item.symbol, {
       ...options,
       name: item.name,
-      securityType: item.security_type
+      securityType: item.security_type,
+      isIndex: Boolean(item.is_index || item.security_type === 'INDEX')
     });
     return { ...data, watch_key: item.watch_key };
   }));
