@@ -31,15 +31,24 @@ function codeOf(value) {
   return match ? match[0] : '';
 }
 
+function normalizeWatchItem(value) {
+  const raw = typeof value === 'string' ? value : value?.symbol || value?.name || '';
+  const index = directMarket?.resolveKnownIndex?.(raw)
+    || (value?.security_type === 'INDEX' ? directMarket?.resolveKnownIndex?.(`INDEX:${raw}`) : null);
+  if (index) return `INDEX:${index.symbol}`;
+  const code = codeOf(raw);
+  if (code) return code;
+  const name = String(raw).replace(/^NAME:/i, '').trim();
+  return name ? `NAME:${name}` : '';
+}
+
+function sameWatchItem(left, right) {
+  return normalizeWatchItem(left) === normalizeWatchItem(right);
+}
+
 function normalizeWatchlist(value) {
   const items = Array.isArray(value) ? value : [];
-  const normalized = items.map((item) => {
-    const raw = typeof item === 'string' ? item : item?.symbol || item?.name || '';
-    const code = codeOf(raw);
-    if (code) return code;
-    const name = String(raw).replace(/^NAME:/, '').trim();
-    return name ? `NAME:${name}` : '';
-  }).filter(Boolean);
+  const normalized = items.map(normalizeWatchItem).filter(Boolean);
   return [...new Set(normalized)].slice(0, 30);
 }
 
@@ -455,10 +464,10 @@ function setPaused(paused) {
 
 function removeStock(key) {
   const stock = state.stocks.find((candidate) => stockKey(candidate) === key || candidate.symbol === key);
-  const code = codeOf(stock?.symbol || key);
-  const next = loadWatchlist().filter((item) => item !== key && (!code || codeOf(item) !== code));
+  const target = stock?.watch_key || stock?.symbol || key;
+  const next = loadWatchlist().filter((item) => !sameWatchItem(item, target) && !sameWatchItem(item, key));
   saveWatchlist(next);
-  state.stocks = state.stocks.filter((candidate) => stockKey(candidate) !== key && (!code || codeOf(candidate.symbol) !== code));
+  state.stocks = state.stocks.filter((candidate) => !sameWatchItem(candidate.watch_key || candidate.symbol, target));
   closeDetail();
   render();
   refresh();
@@ -477,10 +486,9 @@ $('#add-form').addEventListener('submit', (event) => {
   const input = $('#stock-input');
   const raw = input.value.trim();
   if (!raw) return;
-  const code = codeOf(raw);
-  const item = code || `NAME:${raw}`;
+  const item = normalizeWatchItem(raw);
   const current = loadWatchlist();
-  if (current.includes(item) || (code && current.some((entry) => codeOf(entry) === code))) {
+  if (current.some((entry) => sameWatchItem(entry, item))) {
     showToast('该标的已经在自选中');
     return;
   }
