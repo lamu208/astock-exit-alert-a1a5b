@@ -18,7 +18,7 @@
   }
 
   const INDEX_DEFINITIONS = Object.freeze([
-    { symbol: '000001.SH', name: '上证指数', aliases: ['上证指数', '上证综指', '沪指'] },
+    { symbol: '000001.SH', name: '上证指数', aliases: ['上证指数', '上证综指', '沪指', '999999', '999999.SH', 'SH999999'] },
     { symbol: '399001.SZ', name: '深证成指', aliases: ['深证成指', '深成指'] },
     { symbol: '399006.SZ', name: '创业板指', aliases: ['创业板指', '创业板指数'] },
     { symbol: '000300.SH', name: '沪深300', aliases: ['沪深300', '沪深300指数'] },
