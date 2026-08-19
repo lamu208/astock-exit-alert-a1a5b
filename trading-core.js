@@ -236,15 +236,37 @@
   function dateKey(value) {
     const date = value instanceof Date ? value : new Date(value || Date.now());
     if (Number.isNaN(date.getTime())) return '';
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  }
+
+  function sameQuoteBar(left, right, securityType) {
+    const tolerance = 10 ** -priceDigits(securityType) / 2 + Number.EPSILON;
+    return ['open', 'close', 'high', 'low'].every((field) => {
+      const leftValue = finiteNumber(left?.[field]);
+      const rightValue = finiteNumber(right?.[field]);
+      return Number.isFinite(leftValue)
+        && Number.isFinite(rightValue)
+        && Math.abs(leftValue - rightValue) <= tolerance;
+    });
   }
 
   function buildSeries(marketData) {
     const quote = marketData.quote || {};
-    const bars = (marketData.daily_bars || []).map(normalizeBar).filter(validBar);
+    const securityType = securityTypeOf(marketData.symbol, marketData.name, marketData.security_type);
+    const barsByDate = new Map();
+    (marketData.daily_bars || []).map(normalizeBar).filter(validBar).forEach((bar) => {
+      const rawDate = String(bar.date || '');
+      const normalizedDate = /^\d{4}-\d{2}-\d{2}/.test(rawDate) ? rawDate.slice(0, 10) : dateKey(rawDate);
+      if (normalizedDate) barsByDate.set(normalizedDate, { ...bar, date: normalizedDate });
+    });
+    const bars = [...barsByDate.values()].sort((left, right) => left.date.localeCompare(right.date));
     const sourceDate = dateKey(marketData.source_time || marketData.fetched_at);
     const current = normalizeBar({
       date: sourceDate,
@@ -257,9 +279,11 @@
     });
     if (!validBar(current)) return bars;
     const last = bars.at(-1);
-    if (last && last.date && sourceDate && last.date === sourceDate) {
+    const matchesLastTradingBar = last && sameQuoteBar(last, current, securityType);
+    if (last && last.date && sourceDate && (last.date === sourceDate || matchesLastTradingBar)) {
       bars[bars.length - 1] = {
         ...current,
+        date: last.date,
         volume: Number.isFinite(last.volume) && last.volume > 0 ? last.volume : current.volume,
         amount: Number.isFinite(last.amount) && last.amount > 0 ? last.amount : current.amount
       };
