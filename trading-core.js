@@ -160,6 +160,7 @@
         {
           title: '1. 趋势优先，量价确认',
           items: [
+            ['量比五级', '量比≤0.8 → 缩量｜0.8<量比<1.3 → 平量｜量比≥1.3 → 放量｜量比≥1.8 → 强放量｜量比≥2.5 → 放巨量'],
             ['放量上涨', '不触发离场'],
             ['放量上涨 + 突破关键位', '触发加仓判断'],
             ['上涨缩量', '可持有（不追高）'],
@@ -524,13 +525,12 @@
   }
 
   function volumeLevel(ratio) {
-    if (!Number.isFinite(ratio) || ratio <= 0) return '未知';
-    if (ratio < 0.8) return '缩量';
-    if (ratio < 1) return '平量';
-    if (ratio < 1.3) return '温和放量';
+    if (!Number.isFinite(ratio) || ratio < 0) return '未知';
+    if (ratio <= 0.8) return '缩量';
+    if (ratio < 1.3) return '平量';
     if (ratio < 1.8) return '放量';
     if (ratio < 2.5) return '强放量';
-    return '巨量';
+    return '放巨量';
   }
 
   function isTechnologySector(marketData, context = {}) {
@@ -957,7 +957,7 @@
     const entryVolumeRatio = volumeRatio;
     const mubuVolume = mubuVolumeState(indicators, marketData, context);
     const volume = mubuVolume.active;
-    const shrink = volumeRatio < 0.8 && !volume;
+    const shrink = volumeRatio <= 0.8 && !volume;
     const expandedVolume = Number.isFinite(entryVolumeRatio) && entryVolumeRatio >= 1.3;
     const hugeVolume = entryVolumeRatio >= 2.5;
     const rising = indicators.change > 0.001;
@@ -977,7 +977,7 @@
       } else if (shrink) {
         signals.push(makeSignal('reduce_half', 'mubu_trend_break_shrink', '缩量跌破趋势线·出一半', `量比${volumeRatio.toFixed(2)}，收盘价跌破${trendLine.label} ${trendLine.value.toFixed(indicators.priceDigits)}，按幕布纪律出一半`, { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.trendBreakShrink, details: { trendLine: trendLine.label, trendLineValue: trendLine.value } }));
       } else {
-        signals.push(makeSignal('warning', 'mubu_trend_break_wait_volume', '跌破趋势线·等待量能确认', `已跌破${trendLine.label} ${trendLine.value.toFixed(indicators.priceDigits)}，量能尚未归入缩量或放量，先警示观察`, { confirmed: false, priority: 540, details: { trendLine: trendLine.label, trendLineValue: trendLine.value } }));
+        signals.push(makeSignal('warning', 'mubu_trend_break_wait_volume', '跌破趋势线·等待量能确认', `已跌破${trendLine.label} ${trendLine.value.toFixed(indicators.priceDigits)}，当前量比${volumeRatio.toFixed(2)}属于${volumeLevel(volumeRatio)}，先警示观察`, { confirmed: false, priority: 540, details: { trendLine: trendLine.label, trendLineValue: trendLine.value } }));
       }
     }
 
