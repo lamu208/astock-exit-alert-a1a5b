@@ -4,19 +4,31 @@
   root.TradingCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createTradingCore() {
   const ACTIONS = {
-    unavailable: { label: '数据不可用', tone: 'unavailable', priority: -1 },
-    hold: { label: '持有观望', tone: 'hold', priority: 100 },
-    hold_no_sell: { label: '不卖观察', tone: 'hold', priority: 120 },
-    add: { label: '建议加仓', tone: 'add', priority: 400 },
-    d_add: { label: 'D档加仓', tone: 'add', priority: 390 },
-    wait_add: { label: '等待加仓确认', tone: 'warning', priority: 440 },
-    warning: { label: '警示观察', tone: 'warning', priority: 500 },
-    reduce_30: { label: '减仓30%', tone: 'reduce', priority: 710 },
-    reduce_30_40: { label: '减仓30%-40%', tone: 'reduce', priority: 735 },
-    reduce_30_50: { label: '减仓30%-50%', tone: 'reduce', priority: 760 },
-    reduce_50_60: { label: '减仓50%-60%', tone: 'reduce', priority: 820 },
-    exit_60_70: { label: '出60%-70%', tone: 'reduce', priority: 880 },
-    clear: { label: '立即清仓', tone: 'clear', priority: 1000 }
+    unavailable: { label: '���ݲ�����', tone: 'unavailable', priority: -1 },
+    hold: { label: '���й���', tone: 'hold', priority: 100 },
+    hold_no_sell: { label: '�����۲�', tone: 'hold', priority: 120 },
+    add: { label: '����Ӳ�', tone: 'add', priority: 400 },
+    d_add: { label: 'D���Ӳ�', tone: 'add', priority: 390 },
+    wait_add: { label: '�ȴ��Ӳ�ȷ��', tone: 'warning', priority: 440 },
+    warning: { label: '��ʾ�۲�', tone: 'warning', priority: 500 },
+    reduce_partial: { label: '�����ٲ���', tone: 'reduce', priority: 700 },
+    reduce_30: { label: '����30%', tone: 'reduce', priority: 710 },
+    reduce_30_40: { label: '����30%-40%', tone: 'reduce', priority: 735 },
+    reduce_30_50: { label: '����30%-50%', tone: 'reduce', priority: 760 },
+    reduce_half: { label: '��һ��', tone: 'reduce', priority: 850 },
+    reduce_50_60: { label: '����50%-60%', tone: 'reduce', priority: 820 },
+    exit_60_70: { label: '��60%-70%', tone: 'reduce', priority: 880 },
+    exit_over_half: { label: '��һ������', tone: 'reduce', priority: 900 },
+    clear: { label: '�������', tone: 'clear', priority: 1000 }
+  };
+
+  const MUBU_EXIT_PRIORITIES = {
+    trendBreakVolume: 1000,
+    postBreakLowerLows: 995,
+    warningPatternVolume: 910,
+    trendBreakShrink: 870,
+    volumeHalf: 860,
+    warningPatternShrink: 705
   };
 
   const ENTRY_PRIORITIES = {
@@ -39,127 +51,179 @@
 
   const DISCIPLINE_SECTIONS = [
     {
-      title: '🛡 前置总闸：大盘环境过滤（基于日线周期）',
+      title: '?? Ļ���볡���ɣ��ϸ�ִ�У�',
       groups: [
         {
-          title: '大盘状态与可操作范围',
+          title: 'ִ��˳��',
           items: [
-            ['多头市场', '指数>MA20 且 MA5>MA10 → ①②③④全部可操作'],
-            ['震荡市', '指数在MA20附近反复 → ①②③可操作，总仓位≤60%'],
-            ['空头市场', '指数<MA20 → 仅④超跌反弹可操作，总仓位≤20%，①②③暂停']
-          ]
-        }
-      ],
-      notes: [['执行原则', '先过大盘总闸，再判断个股入场；大盘状态不明时暂停新增仓位']]
-    },
-    {
-      title: '💡 入场四模式 · 金字塔加仓 · 五层递进退场（基于日线周期）',
-      groups: [
-        {
-          title: '1. 入场模式',
-          items: [
-            ['① 趋势突破', '突破20日新高 + 放量（量比≥1.3，≥1.8为强放量，≥2.5为放巨量） + MA5>MA10>MA20'],
-            ['② 回踩确认', '缩量回踩MA5/MA10/MA20 + 锤子线/吞没 + 重新转强（胜率最高）'],
-            ['③ 反转形态', '早晨星 + 反弹突破前高 + 放量改善（当日量>前日量且量比≥1.3）'],
-            ['④ 超跌反弹', '股价超跌 + 下跌衰减 + 板块企稳（仅≤20%小仓）']
+            ['��ԭ��', 'һ���������������ߣ�����K�ߣ�����̿�'],
+            ['�����ж�', '���������ߡ�K�ߡ��̿�����ͬʱ���ʹ�ã�������������Ϊ��'],
+            ['�Ƽ����', '���ȿ�������������Դ�ṩ����ʶ���ﵽ6��ĩ��7�³�ƽ���ɽ���Ҳ����������']
           ]
         },
         {
-          title: '2. 加仓金字塔（固定仓位制）',
+          title: '��һ������',
           items: [
-            ['第1档（40%）', '初始突破建立底仓｜止损：突破K线最低点'],
-            ['第2档（按支撑位）', '缩量回踩支撑 + 止跌确认｜MA5不破加25%｜MA10不破加20%｜MA20不破加15%｜止损：支撑位下方1%-2%'],
-            ['第3档（15%）', '放量突破前高 + 多头排列保持｜止损：MA10'],
-            ['第D档', '破位后2-3根K线不创新低 → 反弹补仓｜用已减仓部分的30%-50%回补｜止损：反弹新低'],
-            ['现金储备（20%）', '不动用，应对意外']
+            ['������׼', '���ճɽ�����������ʷ��ߣ���ﵽǰ5��ƽ���ɽ�����1.3������'],
+            ['ϵͳ����', '���� �� ��һ��']
           ]
         },
         {
-          title: '3. 离场五层递进',
+          title: '�ڶ�����������',
           items: [
-            ['① 动能减弱', '缩量跌破MA5 → 仅作观察（不卖）｜放量跌破MA5且当日未收回 → 减仓30%（止损）'],
-            ['② 趋势转弱', '缩量跌破MA10 → 暂不动作｜放量跌破MA10 → 减仓30%-40%'],
-            ['③ 趋势破坏', '放量跌破MA20 → 减仓30%-50%｜缩量跌破 → 先观察'],
-            ['④ 结构破坏', '放量跌破前期突破平台/关键支撑 → 继续减仓'],
-            ['⑤ 趋势反转', 'MA5下穿MA10（死叉）+ 放量 → 清仓剩余仓位']
+            ['������������', '��һ��'],
+            ['������������', 'ȫ���볡'],
+            ['��������������', '��ͻ����������ǵ㻭��ȡ�Ӵ�ʵ������һ��ֱ��'],
+            ['����ṹ', '��������ײ���Ϊ�볡��'],
+            ['�������', 'δ�ṩ�ֶ�����ʱ��MA5���������ߣ��Ƽ��������ʹ��MA5'],
+            ['��λ��2-3��K�߲����µ�', '��������'],
+            ['��λ��2-3��K��Խ��Խ��', 'ȫ���볡']
+          ]
+        },
+        {
+          title: '��������K�ߣ����������߻�һ����ͣ�ߺ�',
+          items: [
+            ['����Ӱ��С����', '���գ�������Ӱ����Ӱ��ʵ���С�����������ٲ��֣�������һ������'],
+            ['������ӰСʵ������', 'ʵ�����߼���û�У����������ٲ��֣�������һ������'],
+            ['ʮ���ǹ���', 'û��ʵ�����ߵ�ʮ���ǲ���������̬�����볡']
+          ]
+        },
+        {
+          title: '���ģ����̿ڣ����������߻�һ����ͣ�ߺ�',
+          items: [
+            ['�������̿�', '������������̬�����𵴣����������ٲ��֣�������һ������'],
+            ['��ǿ���̿�', '���̼�������������ͣ��ը�壺���������ٲ��֣�������һ������'],
+            ['�쳣�̿�', '��ߵ���ֶ��Ӷ��������������쳣���������������ٲ��֣�������һ������']
           ]
         }
       ],
       notes: [
-        ['核心原则', '趋势优先 → 量价确认 → 回踩优先 → 分批建仓 → 上涨加仓 → 破位减仓'],
-        ['禁止追高', '连续3根大阳线、股价距离MA20超10%-12%、放巨量长上影线、个股涨但板块弱']
+        ['����˵��', '�̿����������Դ��ȷ�ṩ��Ӧ���нṹʱ��������ƾ���Ʋ�'],
+        ['��Դ', 'https://share.mubu.com/doc/DO4yxkTzYf']
       ]
     },
     {
-      title: '💼 离场纪律与决策优先级',
+      title: '?? ǰ����բ�����̻������ˣ������������ڣ�',
       groups: [
         {
-          title: '1. 趋势优先，量价确认',
+          title: '����״̬��ɲ�����Χ',
           items: [
-            ['放量上涨', '不触发离场'],
-            ['放量上涨 + 突破关键位', '触发加仓判断'],
-            ['上涨缩量', '可持有（不追高）'],
-            ['下跌缩量', '正常回踩（观察支撑）'],
-            ['放量下跌 + 跌破MA10', '进入风险观察'],
-            ['放量下跌 + 跌破MA20', '减仓30%-50%'],
-            ['放量下跌 + 跌破关键平台/前期突破位', '继续减仓'],
-            ['放量滞涨', '警惕高位换手（警示信号）'],
-            ['放量长上影', '警惕资金兑现（减仓信号）']
+            ['��ͷ�г�', 'ָ��>MA20 �� MA5>MA10 �� �٢ڢۢ�ȫ���ɲ���'],
+            ['����', 'ָ����MA20�������� �� �٢ڢۿɲ������ܲ�λ��60%'],
+            ['��ͷ�г�', 'ָ��<MA20 �� ���ܳ��������ɲ������ܲ�λ��20%���٢ڢ���ͣ']
+          ]
+        }
+      ],
+      notes: [['ִ��ԭ��', '�ȹ�������բ�����жϸ����볡������״̬����ʱ��ͣ������λ']]
+    },
+    {
+      title: '?? �볡��ģʽ �� �������Ӳ� �� ���ݽ��˳��������������ڣ�',
+      groups: [
+        {
+          title: '1. �볡ģʽ',
+          items: [
+            ['�� ����ͻ��', 'ͻ��20���¸� + ���������ȡ�1.3����1.8Ϊǿ��������2.5Ϊ�ž����� + MA5>MA10>MA20'],
+            ['�� �ز�ȷ��', '�����ز�MA5/MA10/MA20 + ������/��û + ����תǿ��ʤ����ߣ�'],
+            ['�� ��ת��̬', '�糿�� + ����ͻ��ǰ�� + �������ƣ�������>ǰ���������ȡ�1.3��'],
+            ['�� ��������', '�ɼ۳��� + �µ�˥�� + ������ȣ�����20%С�֣�']
           ]
         },
         {
-          title: '2. 突破前蓄势 / 强势转强（持仓状态识别）',
+          title: '2. �Ӳֽ��������̶���λ�ƣ�',
           items: [
-            ['触发条件', '股价>MA5 + MA5>MA10>MA20 + 此前3-5日主要在MA5附近缩量整理 + 整理期间未有效跌破MA10 + 当日收阳并明显转强 + 量比≥1.20 + 尚未突破20日新高'],
-            ['系统动作', '持有观望｜强势转强'],
-            ['识别说明', 'MA5附近缩量整理 → 放量转强；尚未突破20日新高，等待突破确认']
+            ['��1����40%��', '��ʼͻ�ƽ����ײ֣�ֹ��ͻ��K����͵�'],
+            ['��2������֧��λ��', '�����ز�֧�� + ֹ��ȷ�ϣ�MA5���Ƽ�25%��MA10���Ƽ�20%��MA20���Ƽ�15%��ֹ��֧��λ�·�1%-2%'],
+            ['��3����15%��', '����ͻ��ǰ�� + ��ͷ���б��֣�ֹ��MA10'],
+            ['��D��', '��λ��2-3��K�߲����µ� �� �������֣����Ѽ��ֲ��ֵ�30%-50%�ز���ֹ�𣺷����µ�'],
+            ['�ֽ𴢱���20%��', '�����ã�Ӧ������']
           ]
         },
         {
-          title: '3. 趋势线破坏（MA5为核心）',
+          title: '3. �볡���ݽ�',
           items: [
-            ['缩量破MA5', '观察（不卖）'],
-            ['放量破MA5（量比≥1.3）+ 当日未收回', '减仓30%（止损）'],
-            ['破位后2-3根K线不创新低', '反弹补仓（D档加仓）'],
-            ['破位后2-3根K线越来越低', '全部离场']
-          ]
-        },
-        {
-          title: '4. K线与形态',
-          items: [
-            ['长上影线 + 大阳线后 + 放量', '减仓50%-60%'],
-            ['K线双顶 + 创新高 + 放量', '出60%-70%；未创新高或回调途中不提示'],
-            ['极端长上影线', '立即清仓'],
-            ['价格对子顶 + 放量（仅历史新高）', '明显上涨后，尾数对子最高价严格创可用历史新高 + 放量长上影线 → 出60%-70%；未创新高和反弹途中均不提示'],
-            ['连续大阳线/涨停后：跳空长上下影小阳线', '缩量减一部分｜放量出比一半多'],
-            ['连续大阳线/涨停后：极长上影、实体几乎没有', '缩量减一部分｜放量出比一半多']
-          ]
-        },
-        {
-          title: '5. 盘口警示（连续大阳线/涨停线后）',
-          items: [
-            ['剧烈震荡盘口', '反复大波浪形态剧烈震荡 → 缩量减一部分｜放量出比一半多'],
-            ['假强势盘口', '开盘急速拉升但不涨停/炸板 → 缩量减一部分｜放量出比一半多'],
-            ['异常盘口', '最高点出现对子顶、拖拉机单等 → 缩量减一部分｜放量出比一半多']
-          ]
-        },
-        {
-          title: '6. 决策顺序（必须按照）',
-          items: [
-            ['①', '放量跌破趋势线 → 立即减仓/清仓'],
-            ['②', '趋势线仍完整 → 判断K线形态'],
-            ['③', 'K线出现警示 → 观察是否伴随放量'],
-            ['④', '放量警示信号 → 缓慢减仓'],
-            ['⑤', '无警示信号 → 如无其他理由可持有/加仓']
+            ['�� ���ܼ���', '��������MA5 �� �����۲죨����������������MA5�ҵ���δ�ջ� �� ����30%��ֹ��'],
+            ['�� ����ת��', '��������MA10 �� �ݲ���������������MA10 �� ����30%-40%'],
+            ['�� �����ƻ�', '��������MA20 �� ����30%-50%���������� �� �ȹ۲�'],
+            ['�� �ṹ�ƻ�', '��������ǰ��ͻ��ƽ̨/�ؼ�֧�� �� ��������'],
+            ['�� ���Ʒ�ת', 'MA5�´�MA10�����棩+ ���� �� ���ʣ���λ']
           ]
         }
       ],
       notes: [
-        ['并列判断', '量、趋势线、K线、盘口四条同时判断，以量和趋势线为主，不可等走完整个顺序才动手'],
-        ['单日上限', '多信号叠加时，单日累计减仓≤剩余仓位的70%；明确清仓规则除外'],
-        ['趋势线画法', '单边上升从突破箱体起涨点画线，取接触实体最多的直线；箱体结构破底部即离场。MA5为程序近似'],
-        ['禁止追高', '连续3+大阳线｜股价距离MA20超10%｜放巨量长上影｜个股涨板块弱｜大盘高位放量'],
-        ['程序近似', '用MA5作主趋势线、5日均量作成交量基准（放量=量比≥1.3，≥1.8为强放量，≥2.5为放巨量），离场优先判趋势线+量能；盘口项仅在数据源提供盘中结构时触发']
+        ['����ԭ��', '�������� �� ����ȷ�� �� �ز����� �� �������� �� ���ǼӲ� �� ��λ����'],
+        ['��ֹ׷��', '����3�������ߡ��ɼ۾���MA20��10%-12%���ž�������Ӱ�ߡ������ǵ������']
+      ]
+    },
+    {
+      title: '?? �볡������������ȼ�',
+      groups: [
+        {
+          title: '1. �������ȣ�����ȷ��',
+          items: [
+            ['��������', '�������볡'],
+            ['�������� + ͻ�ƹؼ�λ', '�����Ӳ��ж�'],
+            ['��������', '�ɳ��У���׷�ߣ�'],
+            ['�µ�����', '�����زȣ��۲�֧�ţ�'],
+            ['�����µ� + ����MA10', '������չ۲�'],
+            ['�����µ� + ����MA20', '����30%-50%'],
+            ['�����µ� + ���ƹؼ�ƽ̨/ǰ��ͻ��λ', '��������'],
+            ['��������', '�����λ���֣���ʾ�źţ�'],
+            ['��������Ӱ', '�����ʽ���֣������źţ�']
+          ]
+        },
+        {
+          title: '2. ͻ��ǰ���� / ǿ��תǿ���ֲ�״̬ʶ��',
+          items: [
+            ['��������', '�ɼ�>MA5 + MA5>MA10>MA20 + ��ǰ3-5����Ҫ��MA5������������ + �����ڼ�δ��Ч����MA10 + ��������������תǿ + ���ȡ�1.20 + ��δͻ��20���¸�'],
+            ['ϵͳ����', '���й�����ǿ��תǿ'],
+            ['ʶ��˵��', 'MA5������������ �� ����תǿ����δͻ��20���¸ߣ��ȴ�ͻ��ȷ��']
+          ]
+        },
+        {
+          title: '3. �������ƻ���MA5Ϊ���ģ�',
+          items: [
+            ['������MA5', '�۲죨������'],
+            ['������MA5�����ȡ�1.3��+ ����δ�ջ�', '����30%��ֹ��'],
+            ['��λ��2-3��K�߲����µ�', '�������֣�D���Ӳ֣�'],
+            ['��λ��2-3��K��Խ��Խ��', 'ȫ���볡']
+          ]
+        },
+        {
+          title: '4. K������̬',
+          items: [
+            ['����Ӱ�� + �����ߺ� + ����', '����50%-60%'],
+            ['K��˫�� + ���¸� + ����', '��60%-70%��δ���¸߻�ص�;�в���ʾ'],
+            ['���˳���Ӱ��', '�������'],
+            ['�۸���Ӷ� + ����������ʷ�¸ߣ�', '�������Ǻ�β��������߼��ϸ񴴿�����ʷ�¸� + ��������Ӱ�� �� ��60%-70%��δ���¸ߺͷ���;�о�����ʾ'],
+            ['����������/��ͣ�����ճ�����ӰС����', '������һ���֣���������һ���'],
+            ['����������/��ͣ�󣺼�����Ӱ��ʵ�弸��û��', '������һ���֣���������һ���']
+          ]
+        },
+        {
+          title: '5. �̿ھ�ʾ������������/��ͣ�ߺ�',
+          items: [
+            ['�������̿�', '����������̬������ �� ������һ���֣���������һ���'],
+            ['��ǿ���̿�', '���̼�������������ͣ/ը�� �� ������һ���֣���������һ���'],
+            ['�쳣�̿�', '��ߵ���ֶ��Ӷ������������� �� ������һ���֣���������һ���']
+          ]
+        },
+        {
+          title: '6. ����˳�򣨱��밴�գ�',
+          items: [
+            ['��', '�������������� �� ��������/���'],
+            ['��', '������������ �� �ж�K����̬'],
+            ['��', 'K�߳��־�ʾ �� �۲��Ƿ�������'],
+            ['��', '������ʾ�ź� �� ��������'],
+            ['��', '�޾�ʾ�ź� �� �����������ɿɳ���/�Ӳ�']
+          ]
+        }
+      ],
+      notes: [
+        ['�����ж�', '���������ߡ�K�ߡ��̿�����ͬʱ�жϣ�������������Ϊ�������ɵ���������˳��Ŷ���'],
+        ['��������', '���źŵ���ʱ�������ۼƼ��֡�ʣ���λ��70%����ȷ��ֹ������'],
+        ['�����߻���', '����������ͻ���������ǵ㻭�ߣ�ȡ�Ӵ�ʵ������ֱ�ߣ�����ṹ�Ƶײ����볡��MA5Ϊ�������'],
+        ['��ֹ׷��', '����3+�����ߣ��ɼ۾���MA20��10%���ž�������Ӱ�������ǰ���������̸�λ����'],
+        ['�������', '��MA5���������ߡ�5�վ������ɽ�����׼������=���ȡ�1.3����1.8Ϊǿ��������2.5Ϊ�ž��������볡������������+���ܣ��̿����������Դ�ṩ���нṹʱ����']
       ]
     }
   ];
@@ -183,7 +247,7 @@
   function securityTypeOf(symbol, name = '', explicitType = '') {
     if (String(explicitType).toUpperCase() === 'ETF') return 'ETF';
     const code = symbolDigits(symbol);
-    return /ETF|LOF|基金/i.test(name) || /^(15|16|50|51|52|56|58|59)\d{4}$/.test(code) ? 'ETF' : 'STOCK';
+    return /ETF|LOF|����/i.test(name) || /^(15|16|50|51|52|56|58|59)\d{4}$/.test(code) ? 'ETF' : 'STOCK';
   }
 
   function priceDigits(securityType) {
@@ -395,7 +459,7 @@
     const riseFromStageLow = stageLow > 0 ? candidate.high / stageLow - 1 : 0;
     const isHistoricalHigh = historicalHigh > 0 && candidate.high > historicalHigh;
 
-    // 只认明显上涨后严格创可用历史新高；未创新高或反弹途中不提示。
+    // ֻ���������Ǻ��ϸ񴴿�����ʷ�¸ߣ�δ���¸߻򷴵�;�в���ʾ��
     if (!isHistoricalHigh || riseFromStageLow < riseThreshold) return none;
 
     const shape = candleShape(candidate, securityType);
@@ -460,13 +524,74 @@
   }
 
   function volumeLevel(ratio) {
-    if (!Number.isFinite(ratio) || ratio <= 0) return '未知';
-    if (ratio < 0.8) return '缩量';
-    if (ratio < 1) return '平量';
-    if (ratio < 1.3) return '温和放量';
-    if (ratio < 1.8) return '放量';
-    if (ratio < 2.5) return '强放量';
-    return '巨量';
+    if (!Number.isFinite(ratio) || ratio <= 0) return 'δ֪';
+    if (ratio < 0.8) return '����';
+    if (ratio < 1) return 'ƽ��';
+    if (ratio < 1.3) return '�ºͷ���';
+    if (ratio < 1.8) return '����';
+    if (ratio < 2.5) return 'ǿ����';
+    return '����';
+  }
+
+  function isTechnologySector(marketData, context = {}) {
+    if (marketData?.is_technology_sector === true || context.isTechnologySector === true) return true;
+    const description = [
+      context.sectorName,
+      marketData?.sector,
+      marketData?.industry,
+      marketData?.quote?.sector,
+      marketData?.quote?.industry
+    ].filter(Boolean).join(' ');
+    return /(�Ƽ�|�뵼��|оƬ|����|�����|����|ͨ��|���|�˹�����|������)/.test(description);
+  }
+
+  function lateJuneEarlyJulyAverageVolume(indicators) {
+    const currentYear = String(indicators?.current?.date || '').slice(0, 4);
+    if (!/^\d{4}$/.test(currentYear)) return NaN;
+    const reference = (indicators?.prior || []).filter((bar) => {
+      const match = String(bar.date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!match || match[1] !== currentYear) return false;
+      const monthDay = `${match[2]}-${match[3]}`;
+      return monthDay >= '06-20' && monthDay <= '07-10';
+    });
+    return reference.length >= 5 ? average(reference.map((bar) => bar.volume)) : NaN;
+  }
+
+  function mubuVolumeState(indicators, marketData, context = {}) {
+    const ratioTriggered = Number.isFinite(indicators?.volumeRatio) && indicators.volumeRatio >= 1.3;
+    const historicalTriggered = indicators?.historicalVolumeHigh === true;
+    const technologyReferenceVolume = isTechnologySector(marketData, context)
+      ? lateJuneEarlyJulyAverageVolume(indicators)
+      : NaN;
+    const technologyTriggered = Number.isFinite(technologyReferenceVolume)
+      && technologyReferenceVolume > 0
+      && indicators.projectedVolume >= technologyReferenceVolume;
+    const active = ratioTriggered || historicalTriggered || technologyTriggered;
+    const reason = historicalTriggered
+      ? '���ճɽ�����������ʷ���'
+      : ratioTriggered
+        ? `���ճɽ����ﵽǰ5�վ�����${indicators.volumeRatio.toFixed(2)}��`
+        : technologyTriggered
+          ? '�Ƽ����ɽ����ﵽ6��ĩ��7�³�ƽ���ɽ���'
+          : '';
+    return {
+      active,
+      ratioTriggered,
+      historicalTriggered,
+      technologyTriggered,
+      technologyReferenceVolume,
+      reason
+    };
+  }
+
+  function mubuTrendLine(indicators, marketData, context = {}) {
+    const manual = finiteNumber(
+      context.trendLine
+      ?? marketData?.trend_line
+      ?? marketData?.quote?.trend_line
+    );
+    if (Number.isFinite(manual) && manual > 0) return { value: manual, label: '�Զ���������' };
+    return { value: indicators.ma5, label: 'MA5��������������ߣ�' };
   }
 
   function calculateIndicators(marketData) {
@@ -532,18 +657,18 @@
 
   function validateMarketData(marketData, indicators) {
     const missing = Array.isArray(marketData?.data_quality?.missing) ? [...marketData.data_quality.missing] : [];
-    if (marketData?.data_quality?.valid === false) missing.push(marketData.data_quality.error || '上游数据标记为无效');
-    if (marketData?.data_quality?.conflict) missing.push('双源行情冲突');
+    if (marketData?.data_quality?.valid === false) missing.push(marketData.data_quality.error || '�������ݱ��Ϊ��Ч');
+    if (marketData?.data_quality?.conflict) missing.push('˫Դ�����ͻ');
     const quote = marketData?.quote || {};
     const numericFields = ['price', 'open', 'high', 'low', 'volume'];
     numericFields.forEach((field) => {
       const value = finiteNumber(quote[field]);
-      if (!Number.isFinite(value) || value < 0 || (field !== 'volume' && value <= 0)) missing.push(`缺少${field}`);
+      if (!Number.isFinite(value) || value < 0 || (field !== 'volume' && value <= 0)) missing.push(`ȱ��${field}`);
     });
-    if (finiteNumber(quote.high) < finiteNumber(quote.low)) missing.push('最高价低于最低价');
-    if (!indicators || indicators.series.length < 20) missing.push('历史K线不足20日');
-    if (!indicators || ![indicators.ma5, indicators.ma10, indicators.ma20].every(Number.isFinite)) missing.push('关键均线不足');
-    if (!indicators || !Number.isFinite(indicators.volumeRatio)) missing.push('成交量基准不足');
+    if (finiteNumber(quote.high) < finiteNumber(quote.low)) missing.push('��߼۵�����ͼ�');
+    if (!indicators || indicators.series.length < 20) missing.push('��ʷK�߲���20��');
+    if (!indicators || ![indicators.ma5, indicators.ma10, indicators.ma20].every(Number.isFinite)) missing.push('�ؼ����߲���');
+    if (!indicators || !Number.isFinite(indicators.volumeRatio)) missing.push('�ɽ�����׼����');
     return { valid: missing.length === 0, missing: [...new Set(missing)] };
   }
 
@@ -586,11 +711,11 @@
   }
 
   function evaluateMarketEnvironment(marketData) {
-    if (!marketData) return { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: '大盘数据不可用，暂停新增仓位' };
+    if (!marketData) return { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: '�������ݲ����ã���ͣ������λ' };
     const decisionData = dailyMarketDecisionData(marketData);
     const indicators = calculateIndicators(decisionData);
     const quality = validateMarketData(decisionData, indicators);
-    if (!quality.valid || indicators.series.length < 25) return { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: `${quality.missing.join('、') || '大盘数据不足'}，暂停新增仓位` };
+    if (!quality.valid || indicators.series.length < 25) return { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: `${quality.missing.join('��') || '�������ݲ���'}����ͣ������λ` };
     const ma20FiveDaysAgo = movingAverage(indicators.series, 20, 5);
     const slope = ma20FiveDaysAgo > 0 ? (indicators.ma20 / ma20FiveDaysAgo - 1) / 5 : 0;
     const ma20NeutralBand = 0.005;
@@ -617,10 +742,10 @@
         ? ['breakout', 'pullback', 'reversal']
         : ['oversold'];
     const statusReason = status === 'bull'
-      ? '大盘多头：①②③④均可操作'
+      ? '���̶�ͷ���٢ڢܾۢ��ɲ���'
       : status === 'bear'
-        ? '大盘空头：仅④超跌反弹可操作，总仓位≤20%'
-        : '大盘震荡：①②③可操作，总仓位≤60%';
+        ? '���̿�ͷ�����ܳ��������ɲ������ܲ�λ��20%'
+        : '�����𵴣��٢ڢۿɲ������ܲ�λ��60%';
     return {
       status,
       effectiveStatus,
@@ -634,7 +759,7 @@
       asOf: indicators.current?.date || '',
       positionCap,
       allowedModes,
-      reason: risk ? `${statusReason}；同时触发大盘风险，禁止追高` : statusReason
+      reason: risk ? `${statusReason}��ͬʱ�������̷��գ���ֹ׷��` : statusReason
     };
   }
 
@@ -655,16 +780,21 @@
     const priorTwo = indicators.prior.slice(-2);
     const priorStrongRun = priorTwo.length === 2
       && priorTwo.every((bar) => candleShape(bar, indicators.securityType).bigBull);
+    const beforePrevious = indicators.prior.at(-2);
+    const previousLimitUp = Boolean(previous
+      && beforePrevious
+      && beforePrevious.close > 0
+      && previous.close / beforePrevious.close - 1 >= 0.095);
+    const postStrongRunContext = priorStrongRun || previousLimitUp;
     const safeBody = Math.max(currentShape.body, current.close * 0.000001);
     const gapSmallBullWithShadows = Boolean(previous
-      && priorStrongRun
+      && postStrongRunContext
       && current.open > previous.high
       && currentShape.bullish
       && !currentShape.doji
       && currentShape.body / current.close < 0.015
-      && currentShape.upper > safeBody * 1.5
-      && currentShape.lower > safeBody * 1.5);
-    const tinyBodyLongUpperAfterRun = priorStrongRun
+      && (currentShape.upper > safeBody * 1.5 || currentShape.lower > safeBody * 1.5));
+    const tinyBodyLongUpperAfterRun = postStrongRunContext
       && currentShape.bullish
       && !currentShape.doji
       && currentShape.longUpper
@@ -687,6 +817,8 @@
       threeBigBull,
       previousBigBull: Boolean(previousShape?.bigBull),
       priorStrongRun,
+      previousLimitUp,
+      postStrongRunContext,
       gapSmallBullWithShadows,
       tinyBodyLongUpperAfterRun,
       tapeWarnings,
@@ -805,7 +937,7 @@
 
   function resolveSignals(signals) {
     const sorted = [...signals].sort((left, right) => right.priority - left.priority);
-    const primary = sorted[0] || makeSignal('hold', 'default_hold', '纪律判断', '未触发加仓、减仓或离场条件');
+    const primary = sorted[0] || makeSignal('hold', 'default_hold', '�����ж�', 'δ�����Ӳ֡����ֻ��볡����');
     const secondary = sorted.filter((signal) => signal !== primary).slice(0, 2);
     return { primary, secondary, all: sorted };
   }
@@ -814,7 +946,7 @@
     const indicators = calculateIndicators(marketData);
     const quality = validateMarketData(marketData, indicators);
     if (!quality.valid) {
-      const primary = makeSignal('unavailable', 'data_quality', '数据不可用', quality.missing.join('、'), { confirmed: false, scope: 'data' });
+      const primary = makeSignal('unavailable', 'data_quality', '���ݲ�����', quality.missing.join('��'), { confirmed: false, scope: 'data' });
       return { dataStatus: 'unavailable', quality, indicators, patterns: null, market: context.market || null, blocked: true, primary, secondary: [], signals: [primary] };
     }
 
@@ -823,97 +955,72 @@
     const current = indicators.current;
     const volumeRatio = indicators.volumeRatio;
     const entryVolumeRatio = volumeRatio;
-    const shrink = volumeRatio < 0.8;
-    const volume = indicators.volumeConfirmed;
+    const mubuVolume = mubuVolumeState(indicators, marketData, context);
+    const volume = mubuVolume.active;
+    const shrink = volumeRatio < 0.8 && !volume;
     const expandedVolume = Number.isFinite(entryVolumeRatio) && entryVolumeRatio >= 1.3;
     const hugeVolume = entryVolumeRatio >= 2.5;
     const rising = indicators.change > 0.001;
     const falling = indicators.change < -0.001;
     const isConfirmed = !isTradingSession(marketData.source_time);
     const shapeExitEligible = !patterns.currentShape.doji;
-    const market = context.market || { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: '大盘数据不可用，暂停新增仓位' };
+    const market = context.market || { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: '�������ݲ����ã���ͣ������λ' };
     const continuedDeclineAfterBreak = detectContinuedDeclineAfterBreak(indicators);
+    const trendLine = mubuTrendLine(indicators, marketData, context);
+    const trendBroken = Number.isFinite(trendLine.value) && current.close < trendLine.value;
 
-    if (continuedDeclineAfterBreak) signals.push(makeSignal('clear', 'post_break_lower_lows', '破位后持续创新低·全部离场', '跌破MA5后连续2-3根K线低点越来越低，按纪律全部离场', { confirmed: isConfirmed }));
-    if (shapeExitEligible && patterns.currentShape.extremeUpper) signals.push(makeSignal('clear', 'extreme_upper_shadow', '极端长上影线', '上影线超过实体3倍且超过收盘价3%，按纪律立即清仓', { confirmed: isConfirmed }));
-    if (indicators.deathCross && volume) signals.push(makeSignal('clear', 'ma5_death_cross', '第五层·趋势反转', 'MA5从上方下穿MA10并获量价确认，按纪律清仓离场', { confirmed: isConfirmed }));
-    else if (indicators.deathCross) signals.push(makeSignal('warning', 'ma5_death_cross_wait_volume', '趋势反转待量能确认', 'MA5已下穿MA10，但尚未达到放量确认标准，先警示观察', { confirmed: false }));
-    if (shapeExitEligible && patterns.klineDoubleTop) {
+    if (continuedDeclineAfterBreak) signals.push(makeSignal('clear', 'post_break_lower_lows', '��λ��������µ͡�ȫ���볡', '���������ߺ�����2-3��K�ߵ͵�Խ��Խ�ͣ���Ļ������ȫ���볡', { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.postBreakLowerLows }));
+
+    if (trendBroken) {
       if (volume) {
-        const volumeReason = indicators.historicalVolumeHigh
-          ? '当日成交量创可用历史新高'
-          : `量比达到${indicators.volumeRatio.toFixed(2)}`;
-        signals.push(makeSignal('exit_60_70', 'kline_double_top_confirmed', '创新高K线双顶放量·出60%-70%', `第二峰严格创可用历史新高、两峰价格接近、中间回撤≥3%且第二峰转弱；${volumeReason}，按纪律出60%-70%`, { confirmed: isConfirmed }));
+        signals.push(makeSignal('clear', 'mubu_trend_break_volume', '�������������ߡ�ȫ���볡', `${mubuVolume.reason}�������̼۵���${trendLine.label} ${trendLine.value.toFixed(indicators.priceDigits)}����Ļ������ȫ���볡`, { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.trendBreakVolume, details: { trendLine: trendLine.label, trendLineValue: trendLine.value, volume: mubuVolume } }));
+      } else if (shrink) {
+        signals.push(makeSignal('reduce_half', 'mubu_trend_break_shrink', '�������������ߡ���һ��', `����${volumeRatio.toFixed(2)}�����̼۵���${trendLine.label} ${trendLine.value.toFixed(indicators.priceDigits)}����Ļ�����ɳ�һ��`, { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.trendBreakShrink, details: { trendLine: trendLine.label, trendLineValue: trendLine.value } }));
       } else {
-        signals.push(makeSignal('hold', 'kline_double_top_wait_volume', '创新高K线双顶候选·持有观察', '第二峰已严格创可用历史新高并形成M头候选，但当日量能未确认，持有观察，不减仓', { confirmed: false, priority: 115 }));
+        signals.push(makeSignal('warning', 'mubu_trend_break_wait_volume', '���������ߡ��ȴ�����ȷ��', `�ѵ���${trendLine.label} ${trendLine.value.toFixed(indicators.priceDigits)}��������δ����������������Ⱦ�ʾ�۲�`, { confirmed: false, priority: 540, details: { trendLine: trendLine.label, trendLineValue: trendLine.value } }));
       }
+    }
+
+    if (volume) {
+      signals.push(makeSignal('reduce_half', 'mubu_volume_half', '��һ����������һ��', `${mubuVolume.reason}����Ļ���볡���ɳ�һ��`, { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.volumeHalf, details: { volume: mubuVolume } }));
     }
     const pairedPrice = patterns.pairedPriceSetup;
     if (pairedPrice.active && pairedPrice.confirmed) {
       const volumeReason = pairedPrice.historicalVolumeHigh
-        ? '对子日成交量创可用历史新高'
-        : `对子日成交量达到前5日均量的${pairedPrice.volumeRatio.toFixed(2)}倍`;
-      signals.push(makeSignal('exit_60_70', 'paired_price_top_confirmed', '历史新高价格对子顶·出60%-70%', `明显上涨后最高价${pairedPrice.price.toFixed(indicators.priceDigits)}形成价格对子并严格创可用历史新高，伴随放量长上影；${volumeReason}，按纪律出60%-70%`, { confirmed: true }));
+        ? '�����ճɽ�����������ʷ�¸�'
+        : `�����ճɽ����ﵽǰ5�վ�����${pairedPrice.volumeRatio.toFixed(2)}��`;
+      signals.push(makeSignal('exit_over_half', 'paired_price_top_confirmed', '��ʷ�¸߼۸���Ӷ�����һ������', `�������Ǻ���߼�${pairedPrice.price.toFixed(indicators.priceDigits)}�γɼ۸���Ӳ��ϸ񴴿�����ʷ�¸ߣ������������Ӱ��${volumeReason}����Ļ�����ɳ�һ������`, { confirmed: true, priority: MUBU_EXIT_PRIORITIES.warningPatternVolume }));
     }
     const postStrongRunPattern = patterns.gapSmallBullWithShadows || patterns.tinyBodyLongUpperAfterRun;
     if (shapeExitEligible && postStrongRunPattern) {
-      if (volume) signals.push(makeSignal('exit_60_70', 'post_strong_run_kline_volume', '连续大阳线后异常K线·出60%-70%', '连续大阳线/涨停线后出现跳空长上下影小阳线或极长上影小实体阳线，并伴随放量，按纪律出比一半多', { confirmed: isConfirmed }));
-      else if (shrink) signals.push(makeSignal('reduce_30', 'post_strong_run_kline_shrink', '连续大阳线后异常K线·减一部分', '连续大阳线/涨停线后出现警示K线但成交量萎缩，按纪律先减一部分', { confirmed: isConfirmed }));
-      else signals.push(makeSignal('warning', 'post_strong_run_kline_wait_volume', '连续大阳线后异常K线·观察量能', '连续大阳线/涨停线后出现警示K线，量能尚未明确，先警示观察', { confirmed: false }));
-    } else if (shapeExitEligible && patterns.currentShape.longUpper && patterns.previousBigBull && volume) {
-      signals.push(makeSignal('reduce_50_60', 'upper_after_big_bull', '大阳线后放量长上影', '前一日大阳线后出现放量长上影，按纪律减仓50%-60%', { confirmed: isConfirmed }));
-    } else if (shapeExitEligible && patterns.currentShape.longUpper && volume) {
-      signals.push(makeSignal('reduce_30', 'volume_long_upper', '放量长上影·减仓信号', '放量长上影显示资金兑现，按纪律缓慢减仓', { confirmed: isConfirmed }));
+      if (volume) signals.push(makeSignal('exit_over_half', 'post_strong_run_kline_volume', '���������ߺ��쳣K�ߡ���һ������', '����������/��ͣ�ߺ�������ճ���Ӱ������Ӱ�򼫳���ӰСʵ�����ߣ��������������Ļ�����ɳ�һ������', { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.warningPatternVolume }));
+      else if (shrink) signals.push(makeSignal('reduce_partial', 'post_strong_run_kline_shrink', '���������ߺ��쳣K�ߡ������ٲ���', '����������/��ͣ�ߺ���־�ʾK���ҳɽ���ή������Ļ�����ɼ����ٲ���', { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.warningPatternShrink }));
+      else signals.push(makeSignal('warning', 'post_strong_run_kline_wait_volume', '���������ߺ��쳣K�ߡ��۲�����', '����������/��ͣ�ߺ���־�ʾK�ߣ�������δ��ȷ���Ⱦ�ʾ�۲�', { confirmed: false }));
     }
 
     const tapeWarningNames = [
-      patterns.tapeWarnings.violentOscillation && '剧烈震荡盘口',
-      patterns.tapeWarnings.fakeStrength && '开盘急拉未涨停/炸板',
-      patterns.tapeWarnings.abnormalOrders && '拖拉机单等异常盘口'
+      patterns.tapeWarnings.violentOscillation && '�������̿�',
+      patterns.tapeWarnings.fakeStrength && '���̼���δ��ͣ/ը��',
+      patterns.tapeWarnings.abnormalOrders && '�����������쳣�̿�'
     ].filter(Boolean);
-    if (tapeWarningNames.length) {
-      const tapeReason = `${tapeWarningNames.join('、')}，仅依据数据源已提供的盘中结构判断`;
-      if (volume) signals.push(makeSignal('exit_60_70', 'tape_warning_volume', '盘口警示放量·出60%-70%', `${tapeReason}；伴随放量，按纪律出比一半多`, { confirmed: true }));
-      else if (shrink) signals.push(makeSignal('reduce_30', 'tape_warning_shrink', '盘口警示缩量·减一部分', `${tapeReason}；成交量萎缩，按纪律减一部分`, { confirmed: true }));
-      else signals.push(makeSignal('warning', 'tape_warning_wait_volume', '盘口警示·观察量能', `${tapeReason}；量能尚未明确，先警示观察`, { confirmed: false }));
+    if (patterns.postStrongRunContext && tapeWarningNames.length) {
+      const tapeReason = `${tapeWarningNames.join('��')}������������Դ���ṩ�����нṹ�ж�`;
+      if (volume) signals.push(makeSignal('exit_over_half', 'tape_warning_volume', '�̿ھ�ʾ��������һ������', `${tapeReason}�������������Ļ�����ɳ�һ������`, { confirmed: true, priority: MUBU_EXIT_PRIORITIES.warningPatternVolume }));
+      else if (shrink) signals.push(makeSignal('reduce_partial', 'tape_warning_shrink', '�̿ھ�ʾ�����������ٲ���', `${tapeReason}���ɽ���ή������Ļ�����ɼ����ٲ���`, { confirmed: true, priority: MUBU_EXIT_PRIORITIES.warningPatternShrink }));
+      else signals.push(makeSignal('warning', 'tape_warning_wait_volume', '�̿ھ�ʾ���۲�����', `${tapeReason}��������δ��ȷ���Ⱦ�ʾ�۲�`, { confirmed: false }));
     }
-    if (current.close < indicators.previousLow20) {
-      if (falling && volume) signals.push(makeSignal('reduce_30_50', 'key_support_break', '第四层·结构破坏', `放量下跌并跌破前期突破平台/关键支撑${indicators.previousLow20.toFixed(indicators.priceDigits)}，按纪律继续减仓`));
-      else if (volume) signals.push(makeSignal('warning', 'key_support_break_wait_direction', '关键平台下方·等待方向确认', '已在关键平台/前期突破位下方，但当日不是放量下跌，先进入风险观察'));
-    }
-
-    if (current.close < indicators.ma20) {
-      if (falling && volume) signals.push(makeSignal('reduce_30_50', 'ma20_break_volume', '第三层·趋势破坏', `量比${volumeRatio.toFixed(2)}，放量下跌并跌破MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}，按纪律减仓30%-50%`));
-      else if (shrink) signals.push(makeSignal('hold_no_sell', 'ma20_break_shrink', '缩量跌破MA20', '缩量破位，先观察，不直接减仓'));
-      else signals.push(makeSignal('warning', 'ma20_break_unconfirmed_volume', '跌破MA20待量能确认', '量能未达到放量标准，暂按警示观察'));
-    }
-
-    if (current.close < indicators.ma5) {
-      if (volume && isConfirmed) signals.push(makeSignal('reduce_30', 'ma5_break_volume', '放量跌破MA5', `量比${volumeRatio.toFixed(2)}且收盘未收回MA5，按纪律减仓30%`));
-      else if (volume) signals.push(makeSignal('warning', 'ma5_break_intraday', '盘中放量跌破MA5', '盘中动态信号，等待收盘确认', { confirmed: false }));
-      else if (shrink) signals.push(makeSignal('hold_no_sell', 'ma5_break_shrink', '第一层·动能减弱', '缩量跌破MA5，仅观察，不卖'));
-      else signals.push(makeSignal('warning', 'ma5_break_mild', '跌破MA5待确认', '量能不足以确认破位，继续观察'));
-    }
-
-    if (current.close < indicators.ma10 && current.close >= indicators.ma20) {
-      signals.push(falling && volume
-        ? makeSignal('warning', 'ma10_break_volume', '放量下跌并跌破MA10·风险观察', '进入风险观察，等待是否收回MA10；尚未跌破MA20，不执行减仓')
-        : makeSignal('hold_no_sell', 'ma10_break_no_volume', '跌破MA10暂不动作', '未放量，按纪律暂不卖出'));
-    }
-
-    if (rising && expandedVolume) signals.push(makeSignal('hold', 'volume_price_up', '放量上涨·不触发离场', '放量上涨只确认趋势，不触发离场；只有突破20日新高或关键位后才进入加仓判断', { priority: VOLUME_PRICE_PRIORITIES.risingVolume }));
-    if (rising && shrink) signals.push(makeSignal('hold', 'volume_price_up_shrink', '趋势完整·上涨缩量', '趋势线完整，上涨缩量可持有但不追高', { priority: VOLUME_PRICE_PRIORITIES.risingShrink }));
-    if (falling && shrink) signals.push(makeSignal('hold_no_sell', 'volume_price_down_shrink', '回踩观察·下跌缩量', '下跌缩量属于正常回踩，继续判断MA5/MA10/MA20支撑是否收回', { priority: VOLUME_PRICE_PRIORITIES.fallingShrink }));
-    if (patterns.stagnant) signals.push(makeSignal('warning', 'volume_stagnation', '量价警示·放量滞涨', '量比≥1.3、涨幅不足1%且接近前高，警惕高位换手', { priority: VOLUME_PRICE_PRIORITIES.stagnation }));
+    if (rising && shrink) signals.push(makeSignal('hold', 'volume_price_up_shrink', '������������������', '���������������������ɳ��е���׷��', { priority: VOLUME_PRICE_PRIORITIES.risingShrink }));
+    if (falling && shrink) signals.push(makeSignal('hold_no_sell', 'volume_price_down_shrink', '�زȹ۲졤�µ�����', '�µ��������������زȣ������ж�MA5/MA10/MA20֧���Ƿ��ջ�', { priority: VOLUME_PRICE_PRIORITIES.fallingShrink }));
+    if (patterns.stagnant) signals.push(makeSignal('warning', 'volume_stagnation', '���۾�ʾ����������', '���ȡ�1.3���Ƿ�����1%�ҽӽ�ǰ�ߣ������λ����', { priority: VOLUME_PRICE_PRIORITIES.stagnation }));
 
     const stockDeviationLimit = indicators.securityType === 'ETF' ? 0.12 : 0.10;
     const sectorWeak = indicators.securityType === 'STOCK' && indicators.change > 0.02 && finiteNumber(context.sectorChange) < 0;
     const chaseReasons = [
-      patterns.threeBigBull && '连续3根大阳线',
-      indicators.deviationMa20 > stockDeviationLimit && `距离MA20超过${stockDeviationLimit * 100}%`,
-      hugeVolume && patterns.currentShape.longUpper && '放巨量长上影线',
-      sectorWeak && '个股涨但板块弱',
-      market.highVolume && '大盘高位放量'
+      patterns.threeBigBull && '����3��������',
+      indicators.deviationMa20 > stockDeviationLimit && `����MA20����${stockDeviationLimit * 100}%`,
+      hugeVolume && patterns.currentShape.longUpper && '�ž�������Ӱ��',
+      sectorWeak && '�����ǵ������',
+      market.highVolume && '���̸�λ����'
     ].filter(Boolean);
     const chaseBlocked = chaseReasons.length > 0;
 
@@ -977,30 +1084,30 @@
     const dAdd = detectDAdd(indicators);
     const preBreakoutStrength = detectPreBreakoutStrength(indicators);
     const addCandidates = [];
-    if (preBreakoutStrength) signals.push(makeSignal('hold', 'pre_breakout_strength', '持有观望｜强势转强', 'MA5附近缩量整理 → 放量转强；尚未突破20日新高，等待突破确认', { priority: VOLUME_PRICE_PRIORITIES.preBreakoutStrength, details: { mode: 'pre_breakout_strength', breakoutLevel: indicators.previousHigh20 } }));
-    if (trendBreakout) addCandidates.push(makeSignal('add', 'entry_breakout', '①趋势突破·第1档建仓（40%）', `突破20日新高并达到5日均量${entryVolumeRatio.toFixed(2)}倍，MA5>MA10>MA20；止损设在突破K线最低点${current.low.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.trendBreakout, details: { mode: 'breakout', entryMode: 'breakout', allocation: '40%', stop: current.low, rank: 2 } }));
+    if (preBreakoutStrength) signals.push(makeSignal('hold', 'pre_breakout_strength', '���й�����ǿ��תǿ', 'MA5������������ �� ����תǿ����δͻ��20���¸ߣ��ȴ�ͻ��ȷ��', { priority: VOLUME_PRICE_PRIORITIES.preBreakoutStrength, details: { mode: 'pre_breakout_strength', breakoutLevel: indicators.previousHigh20 } }));
+    if (trendBreakout) addCandidates.push(makeSignal('add', 'entry_breakout', '������ͻ�ơ���1�����֣�40%��', `ͻ��20���¸߲��ﵽ5�վ���${entryVolumeRatio.toFixed(2)}����MA5>MA10>MA20��ֹ������ͻ��K����͵�${current.low.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.trendBreakout, details: { mode: 'breakout', entryMode: 'breakout', allocation: '40%', stop: current.low, rank: 2 } }));
     if (pullbackConfirmed) {
       const confirmedSupport = ma5CloseHeld ? supportLevels[0] : touchedSupport || previousPullback.support || supportLevels[1];
       const pullbackAllocation = confirmedSupport.label === 'MA5' ? '25%' : confirmedSupport.label === 'MA10' ? '20%' : '15%';
       const pullbackReason = ma5CloseHeld
-        ? '缩量回踩MA5，盘中触及或短暂下探后收盘重新站上MA5，按MA5不破确认'
+        ? '�����ز�MA5�����д����������̽����������վ��MA5����MA5����ȷ��'
         : supportRecovered
-          ? `缩量回踩${touchedSupport.label}后收阳并回收支撑，止跌重新转强`
-          : '前一日缩量回踩MA5/MA10/MA20并出现锤子线或吞没形态，今日重新转强';
-      addCandidates.push(makeSignal('add', 'entry_pullback_confirmed', `②回踩确认·第2档加仓（${pullbackAllocation}）`, `${pullbackReason}；回踩${confirmedSupport.label}不破，加仓${pullbackAllocation}，止损设在支撑位${confirmedSupport.value.toFixed(indicators.priceDigits)}下方1%-2%`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackConfirmed, details: { mode: 'pullback', entryMode: 'pullback', allocation: pullbackAllocation, rank: 1, support: confirmedSupport.label } }));
+          ? `�����ز�${touchedSupport.label}������������֧�ţ�ֹ������תǿ`
+          : 'ǰһ�������ز�MA5/MA10/MA20�����ִ����߻���û��̬����������תǿ';
+      addCandidates.push(makeSignal('add', 'entry_pullback_confirmed', `�ڻز�ȷ�ϡ���2���Ӳ֣�${pullbackAllocation}��`, `${pullbackReason}���ز�${confirmedSupport.label}���ƣ��Ӳ�${pullbackAllocation}��ֹ������֧��λ${confirmedSupport.value.toFixed(indicators.priceDigits)}�·�1%-2%`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackConfirmed, details: { mode: 'pullback', entryMode: 'pullback', allocation: pullbackAllocation, rank: 1, support: confirmedSupport.label } }));
     }
     else if (pullbackWarning) {
       const waitingSupport = ma5CloseHeldCandidate ? supportLevels[0] : touchedSupport;
       const waitAllocation = waitingSupport.label === 'MA5' ? '25%' : waitingSupport.label === 'MA10' ? '20%' : '15%';
       const waitReason = ma5CloseHeldCandidate
-        ? '盘中缩量回踩MA5并重新站上，等待收盘确认MA5不破'
-        : `缩量触及${waitingSupport.label}并出现锤子线或吞没形态，等待重新转强`;
-      addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '②回踩确认候选·等待重新转强', `${waitReason}后再加仓${waitAllocation}`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackWaiting, confirmed: false, details: { mode: 'pullback', entryMode: 'pullback', allocation: waitAllocation, rank: 1, support: waitingSupport.label } }));
+        ? '���������ز�MA5������վ�ϣ��ȴ�����ȷ��MA5����'
+        : `��������${waitingSupport.label}�����ִ����߻���û��̬���ȴ�����תǿ`;
+      addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '�ڻز�ȷ�Ϻ�ѡ���ȴ�����תǿ', `${waitReason}���ټӲ�${waitAllocation}`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackWaiting, confirmed: false, details: { mode: 'pullback', entryMode: 'pullback', allocation: waitAllocation, rank: 1, support: waitingSupport.label } }));
     }
-    if (localBreakout) addCandidates.push(makeSignal('add', 'entry_local_breakout', '突破关键位·第3档加仓（15%）', `放量上涨并突破近5日关键高点${previousHigh5.toFixed(indicators.priceDigits)}，触发加仓判断；多头排列保持，止损设在MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.localBreakout, details: { mode: 'local_breakout', entryMode: 'reversal', allocation: '15%', stop: indicators.ma10, rank: 3 } }));
-    if (reversal) addCandidates.push(makeSignal('add', 'entry_reversal', '③反转形态·第3档加仓（15%）', `早晨星后突破20日前高，当日量为5日均量${entryVolumeRatio.toFixed(2)}倍且高于前日，止损设在MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.reversal, details: { mode: 'reversal', entryMode: 'reversal', allocation: '15%', stop: indicators.ma10, rank: 3 } }));
-    if (oversoldBase) addCandidates.push(makeSignal(sectorStable ? 'add' : 'wait_add', 'entry_oversold', '④超跌反弹（≤20%小仓）', sectorStable ? '股价超跌、下跌衰减且板块企稳，仅建议≤20%小仓' : '超跌和下跌衰减成立，但板块企稳尚未确认，暂不加仓', { scope: 'entry', priority: ENTRY_PRIORITIES.oversold, confirmed: sectorStable, details: { mode: 'oversold', entryMode: 'oversold', allocation: '≤20%', rank: 4 } }));
-    if (dAdd) addCandidates.push(makeSignal('d_add', 'entry_d_add', '反弹补仓·D档加仓', '破位后2-3根K线不创新低且当前反弹收阳，用已减仓部分的30%-50%回补；止损设在反弹新低', { scope: 'entry', priority: ENTRY_PRIORITIES.dAdd, details: { mode: 'd_add', entryMode: 'pullback', allocation: '已减仓部分的30%-50%', stop: '反弹新低' } }));
+    if (localBreakout) addCandidates.push(makeSignal('add', 'entry_local_breakout', 'ͻ�ƹؼ�λ����3���Ӳ֣�15%��', `�������ǲ�ͻ�ƽ�5�չؼ��ߵ�${previousHigh5.toFixed(indicators.priceDigits)}�������Ӳ��жϣ���ͷ���б��֣�ֹ������MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.localBreakout, details: { mode: 'local_breakout', entryMode: 'reversal', allocation: '15%', stop: indicators.ma10, rank: 3 } }));
+    if (reversal) addCandidates.push(makeSignal('add', 'entry_reversal', '�۷�ת��̬����3���Ӳ֣�15%��', `�糿�Ǻ�ͻ��20��ǰ�ߣ�������Ϊ5�վ���${entryVolumeRatio.toFixed(2)}���Ҹ���ǰ�գ�ֹ������MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}`, { scope: 'entry', priority: ENTRY_PRIORITIES.reversal, details: { mode: 'reversal', entryMode: 'reversal', allocation: '15%', stop: indicators.ma10, rank: 3 } }));
+    if (oversoldBase) addCandidates.push(makeSignal(sectorStable ? 'add' : 'wait_add', 'entry_oversold', '�ܳ�����������20%С�֣�', sectorStable ? '�ɼ۳������µ�˥���Ұ�����ȣ��������20%С��' : '�������µ�˥�������������������δȷ�ϣ��ݲ��Ӳ�', { scope: 'entry', priority: ENTRY_PRIORITIES.oversold, confirmed: sectorStable, details: { mode: 'oversold', entryMode: 'oversold', allocation: '��20%', rank: 4 } }));
+    if (dAdd) addCandidates.push(makeSignal('d_add', 'entry_d_add', '�������֡�D���Ӳ�', '��λ��2-3��K�߲����µ��ҵ�ǰ�������������Ѽ��ֲ��ֵ�30%-50%�ز���ֹ�����ڷ����µ�', { scope: 'entry', priority: ENTRY_PRIORITIES.dAdd, details: { mode: 'd_add', entryMode: 'pullback', allocation: '�Ѽ��ֲ��ֵ�30%-50%', stop: '�����µ�' } }));
 
     const riskBlocksAdding = signals.some((signal) => signal.priority >= ACTIONS.warning.priority);
     const marketStatus = market.effectiveStatus || market.status || 'unknown';
@@ -1022,33 +1129,33 @@
       const chaseExempt = candidate.ruleId === 'entry_pullback_confirmed' || candidate.ruleId === 'entry_d_add';
       if ((chaseBlocked && !chaseExempt) || riskBlocksAdding) return;
       if (chaseBlocked && chaseExempt) {
-        candidate.reason += '；该信号属于支撑位确认回踩/回补，不按追高信号硬拦截';
+        candidate.reason += '�����ź�����֧��λȷ�ϻز�/�ز�������׷���ź�Ӳ����';
         candidate.details.chaseOverride = true;
         chaseOverrideUsed = true;
       }
       candidate.details.marketStatus = marketStatus;
       candidate.details.positionCap = marketPositionCap;
-      if (marketStatus === 'sideways') candidate.reason += '；大盘震荡，总仓位不得超过60%';
-      if (marketStatus === 'bear') candidate.reason += '；大盘空头，仅限超跌反弹且总仓位不得超过20%';
+      if (marketStatus === 'sideways') candidate.reason += '�������𵴣��ܲ�λ���ó���60%';
+      if (marketStatus === 'bear') candidate.reason += '�����̿�ͷ�����޳����������ܲ�λ���ó���20%';
       signals.push(candidate);
       addedByMarket = true;
     });
-    if (chaseBlocked && !chaseOverrideUsed) signals.push(makeSignal('hold', 'no_chase', '持有观望·禁止追高', `${chaseReasons.join('；')}，已有仓位可持有，但禁止新增仓位`, { scope: 'entry', priority: 110 }));
+    if (chaseBlocked && !chaseOverrideUsed) signals.push(makeSignal('hold', 'no_chase', '���й�������ֹ׷��', `${chaseReasons.join('��')}�����в�λ�ɳ��У�����ֹ������λ`, { scope: 'entry', priority: 110 }));
     if (blockedByMarket.length && !addedByMarket && !riskBlocksAdding && !chaseBlocked) {
       const title = marketStatus === 'bear'
-        ? '大盘总闸·空头市场暂停①②③'
+        ? '������բ����ͷ�г���ͣ�٢ڢ�'
         : marketStatus === 'sideways'
-          ? '大盘总闸·震荡市暂停④超跌反弹'
-          : '大盘总闸·环境不明暂停新增仓位';
+          ? '������բ��������ͣ�ܳ�������'
+          : '������բ������������ͣ������λ';
       const reason = marketStatus === 'bear'
-        ? '指数位于MA20下方，仅④超跌反弹可操作且总仓位≤20%'
+        ? 'ָ��λ��MA20�·������ܳ��������ɲ������ܲ�λ��20%'
         : marketStatus === 'sideways'
-          ? '震荡市仅①②③可操作且总仓位≤60%'
-          : '大盘日线数据不足，等待总闸状态确认后再新增仓位';
+          ? '���н��٢ڢۿɲ������ܲ�λ��60%'
+          : '�����������ݲ��㣬�ȴ���բ״̬ȷ�Ϻ���������λ';
       signals.push(makeSignal('warning', 'market_gate_block', title, reason, { scope: 'market', priority: 540, confirmed: marketStatus !== 'unknown', details: { marketStatus, positionCap: marketPositionCap } }));
     }
 
-    if (signals.length === 0) signals.push(makeSignal('hold', 'default_hold', '纪律判断', '未触发加仓、减仓或离场条件，按纪律持有观察'));
+    if (signals.length === 0) signals.push(makeSignal('hold', 'default_hold', '�����ж�', 'δ�����Ӳ֡����ֻ��볡�����������ɳ��й۲�'));
     const resolved = resolveSignals(signals);
     return {
       dataStatus: 'ok',
@@ -1100,6 +1207,7 @@
 
   return {
     ACTIONS,
+    MUBU_EXIT_PRIORITIES,
     ENTRY_PRIORITIES,
     VOLUME_PRICE_PRIORITIES,
     DISCIPLINE_SECTIONS,
@@ -1124,6 +1232,10 @@
     detectPairedPriceTop,
     isKlineDoubleTop,
     volumeLevel,
+    isTechnologySector,
+    lateJuneEarlyJulyAverageVolume,
+    mubuVolumeState,
+    mubuTrendLine,
     calculateIndicators,
     validateMarketData,
     evaluateMarketEnvironment,
@@ -1133,3 +1245,4 @@
     publicIndicators
   };
 });
+
