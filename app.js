@@ -251,7 +251,9 @@ function metricPairs(stock) {
     ['MA10', formatPrice(indicators?.ma10, digits)],
     ['MA20', formatPrice(indicators?.ma20, digits)],
     ['MA60', Number.isFinite(indicators?.ma60) ? formatPrice(indicators.ma60, digits) : '不足60日'],
-    [`量比（vs ${indicators?.volumePeriod || '—'}日均量）`, formatRatio(indicators?.volumeRatio)],
+    [`量比（vs ${indicators?.volumePeriod || '—'}日均量）`, Number.isFinite(indicators?.volumeRatio)
+      ? `${formatRatio(indicators.volumeRatio)} · ${core.volumeLevel(indicators.volumeRatio)}`
+      : formatRatio(indicators?.volumeRatio)],
     ['成交额', formatNumber(quote.amount)],
     ['今开 / 昨收', `${formatPrice(quote.open, digits)} / ${formatPrice(quote.previous_close, digits)}`],
     ['最高 / 最低', `${formatPrice(quote.high, digits)} / ${formatPrice(quote.low, digits)}`]
