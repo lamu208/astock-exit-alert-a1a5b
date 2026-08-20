@@ -42,7 +42,7 @@
   const ENTRY_PRIORITIES = {
     pullbackConfirmed: 470,
     trendBreakout: 450,
-    pullbackWaiting: 445,
+    pullbackWaiting: 175,
     localBreakout: 440,
     reversal: 430,
     oversold: 410,
@@ -815,7 +815,6 @@
     const isConfirmed = !isTradingSession(marketData.source_time);
     const shapeExitEligible = !patterns.currentShape.doji;
     const market = context.market || { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: '大盘数据不可用，暂停新增仓位' };
-    const continuedDeclineAfterBreak = detectContinuedDeclineAfterBreak(indicators);
     const belowMa5 = current.close < indicators.ma5;
     const belowMa10 = current.close < indicators.ma10;
     const belowMa20 = current.close < indicators.ma20;
@@ -828,14 +827,6 @@
       ?? marketData.quote?.breakout_support
     );
     const structureBroken = Number.isFinite(keySupport) && keySupport > 0 && current.close < keySupport;
-
-    if (continuedDeclineAfterBreak) {
-      if (isConfirmed) {
-        signals.push(makeSignal('clear', 'post_break_lower_lows', '破位后持续创新低·全部离场', '跌破趋势线后连续2-3根K线低点越来越低，按纪律全部离场', { priority: EXIT_PRIORITIES.postBreakLowerLows }));
-      } else {
-        signals.push(makeSignal('warning', 'post_break_lower_lows_wait_close', '破位后低点继续下移·等待收盘确认', '盘中已出现破位后低点继续下移，收盘确认后执行全部离场', { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
-      }
-    }
 
     if (indicators.deathCross && volume) {
       if (isConfirmed) {
@@ -917,29 +908,40 @@
     const chaseBlocked = chaseReasons.length > 0;
 
     const supportLevels = [
+      { label: 'MA5', value: indicators.ma5 },
       { label: 'MA10', value: indicators.ma10 },
       { label: 'MA20', value: indicators.ma20 }
     ];
     const touchedSupport = supportLevels
-      .map((support) => ({ ...support, distance: support.value > 0 ? Math.abs(current.low - support.value) / support.value : Infinity }))
-      .filter((support) => support.distance < 0.015)
+      .map((support) => ({
+        ...support,
+        distance: support.value > 0 ? Math.abs(current.low - support.value) / support.value : Infinity,
+        reclaimed: support.value > 0
+          && current.low <= support.value * 1.015
+          && current.low >= support.value * 0.94
+          && current.close >= support.value
+      }))
+      .filter((support) => support.reclaimed)
       .sort((left, right) => left.distance - right.distance)[0];
+    const nearMa5 = touchedSupport?.label === 'MA5';
     const nearMa10 = touchedSupport?.label === 'MA10';
     const nearMa20 = touchedSupport?.label === 'MA20';
     const candleRange = current.high - current.low;
-    const supportTurnStrength = Boolean(touchedSupport)
+    const bullishSupportReclaim = Boolean(touchedSupport)
       && current.close > current.open
       && current.close >= touchedSupport.value
-      && (current.close - current.open) / touchedSupport.value >= 0.01
       && candleRange > 0
-      && (current.close - current.low) / candleRange >= 0.55;
+      && (current.close - current.low) / candleRange >= 0.55
+      && (current.close - current.open) / touchedSupport.value >= 0.005;
+    const supportTurnStrength = Boolean(touchedSupport)
+      && bullishSupportReclaim;
     const pullbackShape = patterns.currentShape.hammer || patterns.bullishEngulfing;
-    const pullbackWarning = shrink && (nearMa10 || nearMa20) && pullbackShape;
+    const pullbackWarning = shrink && (nearMa5 || nearMa10 || nearMa20) && !bullishSupportReclaim;
     const supportRecovered = Boolean(touchedSupport)
       && shrink
       && indicators.bullishAlignment
-      && pullbackShape
-      && supportTurnStrength;
+      && supportTurnStrength
+      && (pullbackShape || bullishSupportReclaim);
     const pullbackPrevious = indicators.prior.at(-1);
     const previousPullback = previousPullbackSetup(indicators);
     const previousPullbackConfirmed = previousPullback.confirmed
@@ -974,12 +976,12 @@
     if (pullbackConfirmed) {
       const confirmedSupport = touchedSupport || previousPullback.support || supportLevels[0];
       const pullbackReason = supportRecovered
-        ? `缩量回踩${touchedSupport.label}并出现锤子线或吞没形态，收阳回收支撑后重新转强`
+        ? `缩量回踩${touchedSupport.label}后收阳并回收支撑，按程序近似确认重新转强`
         : `前一日缩量回踩${previousPullback.support.label}并出现锤子线或吞没形态，今日重新转强`;
       addCandidates.push(makeSignal('add', 'entry_pullback_confirmed', '②回踩确认·第2档加仓（20%-30%）', `${pullbackReason}，按纪律加仓20%-30%`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackConfirmed, details: { mode: 'pullback', entryMode: 'pullback', allocation: '20%-30%', rank: 1, support: confirmedSupport.label } }));
     }
     else if (pullbackWarning) {
-      addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '②回踩确认候选·等待重新转强', `缩量触及${touchedSupport.label}并出现锤子线或吞没形态，等待重新转强后再按第2档加仓20%-30%`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackWaiting, confirmed: false, details: { mode: 'pullback', entryMode: 'pullback', allocation: '20%-30%', rank: 1, support: touchedSupport.label } }));
+      addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '②回踩确认候选·等待重新转强', `缩量触及${touchedSupport.label}，等待收阳回收支撑或出现锤子线/吞没后再按第2档加仓20%-30%`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackWaiting, confirmed: false, details: { mode: 'pullback', entryMode: 'pullback', allocation: '20%-30%', rank: 1, support: touchedSupport.label } }));
     }
     if (localBreakout) addCandidates.push(makeSignal('add', 'entry_local_breakout', '放量突破前高·第3档加仓（10%-20%）', `放量上涨并突破近5日关键高点${previousHigh5.toFixed(indicators.priceDigits)}，多头排列保持，按纪律加仓10%-20%`, { scope: 'entry', priority: ENTRY_PRIORITIES.localBreakout, details: { mode: 'local_breakout', entryMode: 'reversal', allocation: '10%-20%', rank: 3 } }));
     if (reversal) addCandidates.push(makeSignal('add', 'entry_reversal', '③反转形态·第3档加仓（10%-20%）', `早晨星后反弹突破前高，当日量为5日均量${entryVolumeRatio.toFixed(2)}倍且高于前日，按纪律加仓10%-20%`, { scope: 'entry', priority: ENTRY_PRIORITIES.reversal, details: { mode: 'reversal', entryMode: 'reversal', allocation: '10%-20%', rank: 3 } }));
@@ -988,7 +990,8 @@
 
     const riskBlocksAdding = signals.some((signal) => signal.priority >= ACTIONS.warning.priority);
     addCandidates.forEach((candidate) => {
-      if (chaseBlocked || riskBlocksAdding) return;
+      const supportReclaim = candidate.details.mode === 'pullback' || candidate.details.mode === 'd_add';
+      if (riskBlocksAdding || (chaseBlocked && !supportReclaim)) return;
       signals.push(candidate);
     });
     if (chaseBlocked) signals.push(makeSignal('hold', 'no_chase', '持有观望·禁止追高', `${chaseReasons.join('；')}，已有仓位可持有，但禁止新增仓位`, { scope: 'entry', priority: 110 }));
