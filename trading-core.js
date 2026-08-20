@@ -437,18 +437,6 @@
     return true;
   }
 
-  function consecutiveLowerLowsAfterMa5Break(bars, count = 3) {
-    if (!Array.isArray(bars) || bars.length < 8 || count < 2) return false;
-    const sample = bars.slice(-count);
-    const lowerLows = sample.slice(1).every((bar, index) => bar.low < sample[index].low * 0.998);
-    const hadBreak = sample.some((bar, index) => {
-      const offset = sample.length - index - 1;
-      const line = movingAverage(bars, 5, offset);
-      return Number.isFinite(line) && bar.close < line;
-    });
-    return lowerLows && hadBreak;
-  }
-
   function volumeLevel(ratio) {
     if (!Number.isFinite(ratio) || ratio < 0) return '未知';
     if (ratio <= 0.8) return '缩量';
@@ -739,7 +727,6 @@
     const structureBreakPersistent = structureBroken
       && indicators.series.slice(-2).every((bar) => bar.close < keySupport);
     const sustainedBelowMa20 = sustainedBelowMovingAverage(indicators.series, 20, 3);
-    const lowerLowsAfterBreak = consecutiveLowerLowsAfterMa5Break(indicators.series, 3);
     const ma5CrossUnderMa10 = indicators.previousMa5 >= indicators.previousMa10
       && indicators.ma5 < indicators.ma10;
     const ma5CrossUnderMa20 = indicators.previousMa5 >= indicators.previousMa20
@@ -782,16 +769,6 @@
           priority: 970,
           details: { bollEnhanced: bollMiddleBreakEnhanced }
         }
-      ));
-    }
-
-    if (lowerLowsAfterBreak) {
-      signals.push(makeSignal(
-        'clear',
-        'lower_lows_after_break',
-        '破位后持续创新低·全部离场',
-        '跌破MA5后连续2-3根K线低点越来越低，按纪律全部离场',
-        { priority: 950 }
       ));
     }
 
@@ -1196,4 +1173,3 @@
     publicIndicators
   };
 });
-
