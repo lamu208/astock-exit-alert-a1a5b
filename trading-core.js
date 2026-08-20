@@ -22,13 +22,21 @@
     clear: { label: '立即清仓', tone: 'clear', priority: 1000 }
   };
 
-  const MUBU_EXIT_PRIORITIES = {
-    trendBreakVolume: 1000,
-    postBreakLowerLows: 995,
-    warningPatternVolume: 910,
-    trendBreakShrink: 870,
-    volumeHalf: 860,
-    warningPatternShrink: 705
+  const EXIT_PRIORITIES = {
+    trendReversal: 1000,
+    postBreakLowerLows: 990,
+    extremeUpper: 980,
+    tapeWarningVolume: 900,
+    pairedTop: 880,
+    klineDoubleTop: 875,
+    warningPatternVolume: 820,
+    structureBreak: 800,
+    ma20Break: 760,
+    ma10Break: 735,
+    ma5Break: 710,
+    warningPatternShrink: 705,
+    trendWarning: 540,
+    shrinkObserve: 180
   };
 
   const ENTRY_PRIORITIES = {
@@ -481,67 +489,6 @@
     return '放巨量';
   }
 
-  function isTechnologySector(marketData, context = {}) {
-    if (marketData?.is_technology_sector === true || context.isTechnologySector === true) return true;
-    const description = [
-      context.sectorName,
-      marketData?.sector,
-      marketData?.industry,
-      marketData?.quote?.sector,
-      marketData?.quote?.industry
-    ].filter(Boolean).join(' ');
-    return /(科技|半导体|芯片|电子|计算机|软件|通信|光电|人工智能|机器人)/.test(description);
-  }
-
-  function lateJuneEarlyJulyAverageVolume(indicators) {
-    const currentYear = String(indicators?.current?.date || '').slice(0, 4);
-    if (!/^\d{4}$/.test(currentYear)) return NaN;
-    const reference = (indicators?.prior || []).filter((bar) => {
-      const match = String(bar.date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if (!match || match[1] !== currentYear) return false;
-      const monthDay = `${match[2]}-${match[3]}`;
-      return monthDay >= '06-20' && monthDay <= '07-10';
-    });
-    return reference.length >= 5 ? average(reference.map((bar) => bar.volume)) : NaN;
-  }
-
-  function mubuVolumeState(indicators, marketData, context = {}) {
-    const ratioTriggered = Number.isFinite(indicators?.volumeRatio) && indicators.volumeRatio >= 1.3;
-    const historicalTriggered = indicators?.historicalVolumeHigh === true;
-    const technologyReferenceVolume = isTechnologySector(marketData, context)
-      ? lateJuneEarlyJulyAverageVolume(indicators)
-      : NaN;
-    const technologyTriggered = Number.isFinite(technologyReferenceVolume)
-      && technologyReferenceVolume > 0
-      && indicators.projectedVolume >= technologyReferenceVolume;
-    const active = ratioTriggered || historicalTriggered || technologyTriggered;
-    const reason = historicalTriggered
-      ? '当日成交量创可用历史最高'
-      : ratioTriggered
-        ? `当日成交量达到前5日均量的${indicators.volumeRatio.toFixed(2)}倍`
-        : technologyTriggered
-          ? '科技板块成交量达到6月末至7月初平均成交量'
-          : '';
-    return {
-      active,
-      ratioTriggered,
-      historicalTriggered,
-      technologyTriggered,
-      technologyReferenceVolume,
-      reason
-    };
-  }
-
-  function mubuTrendLine(indicators, marketData, context = {}) {
-    const manual = finiteNumber(
-      context.trendLine
-      ?? marketData?.trend_line
-      ?? marketData?.quote?.trend_line
-    );
-    if (Number.isFinite(manual) && manual > 0) return { value: manual, label: '自定义趋势线' };
-    return { value: indicators.ma5, label: 'MA5（程序近似趋势线）' };
-  }
-
   function calculateIndicators(marketData) {
     const securityType = securityTypeOf(marketData.symbol, marketData.name, marketData.security_type);
     const series = buildSeries(marketData);
@@ -903,10 +850,10 @@
     const current = indicators.current;
     const volumeRatio = indicators.volumeRatio;
     const entryVolumeRatio = volumeRatio;
-    const mubuVolume = mubuVolumeState(indicators, marketData, context);
-    const volume = mubuVolume.active;
-    const shrink = volumeRatio <= 0.8 && !volume;
     const expandedVolume = Number.isFinite(entryVolumeRatio) && entryVolumeRatio >= 1.3;
+    const volume = expandedVolume;
+    const shrink = Number.isFinite(volumeRatio) && volumeRatio <= 0.8;
+    const flatVolume = Number.isFinite(volumeRatio) && volumeRatio > 0.8 && volumeRatio < 1.3;
     const hugeVolume = entryVolumeRatio >= 2.5;
     const rising = indicators.change > 0.001;
     const falling = indicators.change < -0.001;
@@ -914,35 +861,91 @@
     const shapeExitEligible = !patterns.currentShape.doji;
     const market = context.market || { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: '大盘数据不可用，暂停新增仓位' };
     const continuedDeclineAfterBreak = detectContinuedDeclineAfterBreak(indicators);
-    const trendLine = mubuTrendLine(indicators, marketData, context);
-    const trendBroken = Number.isFinite(trendLine.value) && current.close < trendLine.value;
+    const belowMa5 = current.close < indicators.ma5;
+    const belowMa10 = current.close < indicators.ma10;
+    const belowMa20 = current.close < indicators.ma20;
+    const keySupport = finiteNumber(
+      context.keySupport
+      ?? context.breakoutSupport
+      ?? marketData.key_support
+      ?? marketData.breakout_support
+      ?? marketData.quote?.key_support
+      ?? marketData.quote?.breakout_support
+    );
+    const structureBroken = Number.isFinite(keySupport) && keySupport > 0 && current.close < keySupport;
 
-    if (continuedDeclineAfterBreak) signals.push(makeSignal('clear', 'post_break_lower_lows', '破位后持续创新低·全部离场', '跌破趋势线后连续2-3根K线低点越来越低，按幕布纪律全部离场', { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.postBreakLowerLows }));
-
-    if (trendBroken) {
-      if (volume) {
-        signals.push(makeSignal('clear', 'mubu_trend_break_volume', '放量跌破趋势线·全部离场', `${mubuVolume.reason}，且收盘价跌破${trendLine.label} ${trendLine.value.toFixed(indicators.priceDigits)}，按幕布纪律全部离场`, { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.trendBreakVolume, details: { trendLine: trendLine.label, trendLineValue: trendLine.value, volume: mubuVolume } }));
-      } else if (shrink) {
-        signals.push(makeSignal('reduce_half', 'mubu_trend_break_shrink', '缩量跌破趋势线·出一半', `量比${volumeRatio.toFixed(2)}，收盘价跌破${trendLine.label} ${trendLine.value.toFixed(indicators.priceDigits)}，按幕布纪律出一半`, { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.trendBreakShrink, details: { trendLine: trendLine.label, trendLineValue: trendLine.value } }));
+    if (continuedDeclineAfterBreak) {
+      if (isConfirmed) {
+        signals.push(makeSignal('clear', 'post_break_lower_lows', '破位后持续创新低·全部离场', '跌破趋势线后连续2-3根K线低点越来越低，按纪律全部离场', { priority: EXIT_PRIORITIES.postBreakLowerLows }));
       } else {
-        signals.push(makeSignal('warning', 'mubu_trend_break_wait_volume', '跌破趋势线·等待量能确认', `已跌破${trendLine.label} ${trendLine.value.toFixed(indicators.priceDigits)}，当前量比${volumeRatio.toFixed(2)}属于${volumeLevel(volumeRatio)}，先警示观察`, { confirmed: false, priority: 540, details: { trendLine: trendLine.label, trendLineValue: trendLine.value } }));
+        signals.push(makeSignal('warning', 'post_break_lower_lows_wait_close', '破位后低点继续下移·等待收盘确认', '盘中已出现破位后低点继续下移，收盘确认后执行全部离场', { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
       }
     }
 
-    if (volume) {
-      signals.push(makeSignal('reduce_half', 'mubu_volume_half', '第一条·放量出一半', `${mubuVolume.reason}，按幕布离场纪律出一半`, { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.volumeHalf, details: { volume: mubuVolume } }));
+    if (indicators.deathCross && volume) {
+      if (isConfirmed) {
+        signals.push(makeSignal('clear', 'death_cross_volume', '趋势反转·清仓剩余仓位', `MA5下穿MA10形成死叉，量比${volumeRatio.toFixed(2)}达到放量标准，按第五层纪律清仓`, { priority: EXIT_PRIORITIES.trendReversal }));
+      } else {
+        signals.push(makeSignal('warning', 'death_cross_volume_wait_close', '死叉放量·等待收盘确认', `盘中MA5下穿MA10且量比${volumeRatio.toFixed(2)}，收盘确认后执行清仓`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
+      }
+    }
+
+    if (falling && volume && structureBroken) {
+      if (isConfirmed) {
+        signals.push(makeSignal('reduce_30_50', 'volume_break_key_support', '结构破坏·继续减仓', `放量下跌并跌破关键支撑${keySupport.toFixed(indicators.priceDigits)}，按第四层纪律继续减仓`, { priority: EXIT_PRIORITIES.structureBreak, details: { keySupport } }));
+      } else {
+        signals.push(makeSignal('warning', 'volume_break_key_support_wait_close', '跌破关键支撑·等待收盘确认', `盘中放量跌破关键支撑${keySupport.toFixed(indicators.priceDigits)}，收盘确认后继续减仓`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning, details: { keySupport } }));
+      }
+    }
+
+    if (falling && volume && belowMa20) {
+      if (isConfirmed) {
+        signals.push(makeSignal('reduce_30_50', 'volume_break_ma20', '趋势破坏·减仓30%-50%', `放量下跌且收盘跌破MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}`, { priority: EXIT_PRIORITIES.ma20Break }));
+      } else {
+        signals.push(makeSignal('warning', 'volume_break_ma20_wait_close', '放量跌破MA20·等待收盘确认', `盘中放量下跌并跌破MA20，量比${volumeRatio.toFixed(2)}；收盘确认后减仓30%-50%`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
+      }
+    } else if (falling && volume && belowMa10) {
+      if (isConfirmed) {
+        signals.push(makeSignal('reduce_30_40', 'volume_break_ma10', '趋势转弱·减仓30%-40%', `放量下跌且收盘跌破MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}`, { priority: EXIT_PRIORITIES.ma10Break }));
+      } else {
+        signals.push(makeSignal('warning', 'volume_break_ma10_wait_close', '放量跌破MA10·风险观察', `盘中放量下跌并跌破MA10，量比${volumeRatio.toFixed(2)}；收盘确认后减仓30%-40%`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
+      }
+    } else if (falling && volume && belowMa5) {
+      if (isConfirmed) {
+        signals.push(makeSignal('reduce_30', 'volume_break_ma5', '动能减弱·减仓30%', `放量下跌且收盘跌破MA5 ${indicators.ma5.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}，按止损纪律减仓30%`, { priority: EXIT_PRIORITIES.ma5Break }));
+      } else {
+        signals.push(makeSignal('warning', 'volume_break_ma5_wait_close', '放量跌破MA5·等待收盘确认', `盘中跌破MA5且量比${volumeRatio.toFixed(2)}，等待收盘确认是否未收回`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
+      }
+    } else if (falling && shrink && belowMa20) {
+      signals.push(makeSignal('hold_no_sell', 'shrink_break_ma20_observe', '缩量跌破MA20·先观察', `下跌缩量，量比${volumeRatio.toFixed(2)}；缩量跌破MA20不直接减仓，先观察支撑是否收回`, { priority: EXIT_PRIORITIES.shrinkObserve }));
+    } else if (falling && shrink && belowMa10) {
+      signals.push(makeSignal('hold_no_sell', 'shrink_break_ma10_observe', '缩量跌破MA10·暂不动作', `下跌缩量，量比${volumeRatio.toFixed(2)}；按第二层纪律暂不动作`, { priority: EXIT_PRIORITIES.shrinkObserve }));
+    } else if (falling && shrink && belowMa5) {
+      signals.push(makeSignal('hold_no_sell', 'shrink_break_ma5_observe', '缩量跌破MA5·观察不卖', `下跌缩量，量比${volumeRatio.toFixed(2)}；按第一层纪律仅作观察，不卖`, { priority: EXIT_PRIORITIES.shrinkObserve }));
+    } else if (falling && flatVolume && belowMa5) {
+      signals.push(makeSignal('warning', 'flat_break_ma5_observe', '平量跌破MA5·观察确认', `当前量比${volumeRatio.toFixed(2)}属于平量，跌破MA5但尚未满足放量减仓条件`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
     }
     const pairedPrice = patterns.pairedPriceSetup;
     if (pairedPrice.active && pairedPrice.confirmed) {
       const volumeReason = pairedPrice.historicalVolumeHigh
         ? '对子日成交量创可用历史新高'
         : `对子日成交量达到前5日均量的${pairedPrice.volumeRatio.toFixed(2)}倍`;
-      signals.push(makeSignal('exit_over_half', 'paired_price_top_confirmed', '历史新高价格对子顶·出一半以上', `明显上涨后最高价${pairedPrice.price.toFixed(indicators.priceDigits)}形成价格对子并严格创可用历史新高，伴随放量长上影；${volumeReason}，按幕布纪律出一半以上`, { confirmed: true, priority: MUBU_EXIT_PRIORITIES.warningPatternVolume }));
+      signals.push(makeSignal('reduce_half', 'paired_price_top_confirmed', '历史新高价格对子顶·出一半', `明显上涨后最高价${pairedPrice.price.toFixed(indicators.priceDigits)}形成价格对子并严格创可用历史新高，伴随放量长上影；${volumeReason}`, { confirmed: true, priority: EXIT_PRIORITIES.pairedTop }));
+    }
+    if (shapeExitEligible && patterns.klineDoubleTop && volume) {
+      signals.push(makeSignal('exit_60_70', 'kline_double_top_confirmed', '历史新高K线双顶·出60%-70%', `K线双顶的第二个峰严格创可用历史新高，量比${volumeRatio.toFixed(2)}达到放量标准`, { confirmed: isConfirmed, priority: EXIT_PRIORITIES.klineDoubleTop }));
+    }
+    if (shapeExitEligible && patterns.currentShape.extremeUpper) {
+      if (isConfirmed) {
+        signals.push(makeSignal('clear', 'extreme_upper_shadow', '极端长上影线·立即清仓', '上影线超过实体3倍且超过收盘价3%，按K线纪律立即清仓', { priority: EXIT_PRIORITIES.extremeUpper }));
+      } else {
+        signals.push(makeSignal('warning', 'extreme_upper_shadow_wait_close', '极端长上影线·等待收盘确认', '盘中出现极端长上影，收盘形态确认后执行清仓纪律', { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
+      }
     }
     const postStrongRunPattern = patterns.gapSmallBullWithShadows || patterns.tinyBodyLongUpperAfterRun;
     if (shapeExitEligible && postStrongRunPattern) {
-      if (volume) signals.push(makeSignal('exit_over_half', 'post_strong_run_kline_volume', '连续大阳线后异常K线·出一半以上', '连续大阳线/涨停线后出现跳空长上影、长下影或极长上影小实体阳线，并伴随放量，按幕布纪律出一半以上', { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.warningPatternVolume }));
-      else if (shrink) signals.push(makeSignal('reduce_partial', 'post_strong_run_kline_shrink', '连续大阳线后异常K线·减仓少部分', '连续大阳线/涨停线后出现警示K线且成交量萎缩，按幕布纪律减仓少部分', { confirmed: isConfirmed, priority: MUBU_EXIT_PRIORITIES.warningPatternShrink }));
+      if (volume) signals.push(makeSignal('reduce_50_60', 'post_strong_run_kline_volume', '连续大阳线后异常K线·减仓50%-60%', '连续大阳线/涨停线后出现跳空影线小阳线或极长上影小实体阳线，并伴随放量', { confirmed: isConfirmed, priority: EXIT_PRIORITIES.warningPatternVolume }));
+      else if (shrink) signals.push(makeSignal('reduce_partial', 'post_strong_run_kline_shrink', '连续大阳线后异常K线·减仓少部分', '连续大阳线/涨停线后出现警示K线且成交量萎缩', { confirmed: isConfirmed, priority: EXIT_PRIORITIES.warningPatternShrink }));
       else signals.push(makeSignal('warning', 'post_strong_run_kline_wait_volume', '连续大阳线后异常K线·观察量能', '连续大阳线/涨停线后出现警示K线，量能尚未明确，先警示观察', { confirmed: false }));
     }
 
@@ -953,10 +956,11 @@
     ].filter(Boolean);
     if (patterns.postStrongRunContext && tapeWarningNames.length) {
       const tapeReason = `${tapeWarningNames.join('、')}，仅依据数据源已提供的盘中结构判断`;
-      if (volume) signals.push(makeSignal('exit_over_half', 'tape_warning_volume', '盘口警示放量·出一半以上', `${tapeReason}；伴随放量，按幕布纪律出一半以上`, { confirmed: true, priority: MUBU_EXIT_PRIORITIES.warningPatternVolume }));
-      else if (shrink) signals.push(makeSignal('reduce_partial', 'tape_warning_shrink', '盘口警示缩量·减仓少部分', `${tapeReason}；成交量萎缩，按幕布纪律减仓少部分`, { confirmed: true, priority: MUBU_EXIT_PRIORITIES.warningPatternShrink }));
+      if (volume) signals.push(makeSignal('exit_over_half', 'tape_warning_volume', '盘口警示放量·出一半以上', `${tapeReason}；伴随放量，按盘口纪律出一半以上`, { confirmed: true, priority: EXIT_PRIORITIES.tapeWarningVolume }));
+      else if (shrink) signals.push(makeSignal('reduce_partial', 'tape_warning_shrink', '盘口警示缩量·减仓少部分', `${tapeReason}；成交量萎缩`, { confirmed: true, priority: EXIT_PRIORITIES.warningPatternShrink }));
       else signals.push(makeSignal('warning', 'tape_warning_wait_volume', '盘口警示·观察量能', `${tapeReason}；量能尚未明确，先警示观察`, { confirmed: false }));
     }
+    if (rising && volume) signals.push(makeSignal('hold', 'volume_price_up_volume', '趋势确认·放量上涨', `量比${volumeRatio.toFixed(2)}达到放量标准；放量上涨不触发离场，突破关键位时再进入加仓判断`, { priority: VOLUME_PRICE_PRIORITIES.risingVolume }));
     if (rising && shrink) signals.push(makeSignal('hold', 'volume_price_up_shrink', '趋势完整·上涨缩量', '趋势线完整，上涨缩量可持有但不追高', { priority: VOLUME_PRICE_PRIORITIES.risingShrink }));
     if (falling && shrink) signals.push(makeSignal('hold_no_sell', 'volume_price_down_shrink', '回踩观察·下跌缩量', '下跌缩量属于正常回踩，继续判断MA5/MA10/MA20支撑是否收回', { priority: VOLUME_PRICE_PRIORITIES.fallingShrink }));
     if (patterns.stagnant) signals.push(makeSignal('warning', 'volume_stagnation', '量价警示·放量滞涨', '量比≥1.3、涨幅不足1%且接近前高，警惕高位换手', { priority: VOLUME_PRICE_PRIORITIES.stagnation }));
@@ -1155,7 +1159,7 @@
 
   return {
     ACTIONS,
-    MUBU_EXIT_PRIORITIES,
+    EXIT_PRIORITIES,
     ENTRY_PRIORITIES,
     VOLUME_PRICE_PRIORITIES,
     DISCIPLINE_SECTIONS,
@@ -1180,10 +1184,6 @@
     detectPairedPriceTop,
     isKlineDoubleTop,
     volumeLevel,
-    isTechnologySector,
-    lateJuneEarlyJulyAverageVolume,
-    mubuVolumeState,
-    mubuTrendLine,
     calculateIndicators,
     validateMarketData,
     evaluateMarketEnvironment,
@@ -1193,4 +1193,3 @@
     publicIndicators
   };
 });
-
