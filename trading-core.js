@@ -50,80 +50,102 @@
         {
           title: '1. 入场模式',
           items: [
-            ['① 趋势突破', '突破20日新高 + 放量（1.3～1.8倍） + MA5>MA10>MA20'],
-            ['② 回踩确认', '缩量回踩MA10/MA20 + 锤子线/吞没 + 重新转强（优先级最高）'],
-            ['③ 反转形态', '早晨星 + 反弹突破前高 + 放量改善'],
-            ['④ 超跌反弹', '股价超跌 + 下跌衰减 + 板块企稳（仅≤20%小仓）']
+            ['① 趋势突破', '突破20日新高 + 放量（1.3～1.8倍） + MA5>MA10>MA20；若同时放量突破BOLL上轨、上轨向上且带宽扩大，突破有效性增强'],
+            ['② 回踩确认', '缩量回踩MA10/MA20 + 锤子线/吞没 + 重新转强（优先级最高）；若MA10/MA20与BOLL中轨形成共振支撑，优先加仓'],
+            ['③ 反转形态', '早晨星 + 反弹突破前高 + 放量改善；若在BOLL下轨附近止跌并重新站回中轨，反转确认增强'],
+            ['④ 超跌反弹', '股价超跌 + 下跌衰减 + 板块企稳（仅≤20%小仓）；跌破BOLL下轨后快速收回且下跌量能衰减，可增强信号，触碰下轨不得单独作为买点']
           ]
         },
         {
           title: '2. 加仓金字塔',
           items: [
             ['第1档（30%-40%）', '初始突破建立底仓'],
-            ['第2档（20%-30%）', '缩量回踩支撑 + 止跌确认'],
-            ['第3档（10%-20%）', '放量突破前高 + 多头排列保持']
+            ['第2档（20%-30%）', '缩量回踩支撑 + 止跌确认；MA10/MA20与BOLL中轨共振支撑时优先执行'],
+            ['第3档（10%-20%）', '放量突破前高 + 多头排列保持；沿BOLL上轨向上运行或带宽扩张时，趋势确认增强']
           ]
         },
         {
           title: '3. 离场五层递进',
           items: [
-            ['① 动能减弱', '跌破MA5 → 仅作观察（不卖）'],
-            ['② 趋势转弱', '缩量跌破MA10 → 暂不动作｜放量跌破MA10 → 观察'],
-            ['③ 趋势破坏', '放量跌破MA20 → 减仓30%-50%｜缩量跌破 → 先观察'],
-            ['④ 结构破坏', '放量跌破前期突破平台/关键支撑 → 继续减仓'],
-            ['⑤ 趋势反转', 'MA5']
+            ['① 动能减弱｜观察', '缩量跌破MA5 → 正常回踩，观察不卖｜放量跌破且未收回MA5 → 减仓约30%；BOLL中轨仍向上且未破坏时可降低短期警报等级'],
+            ['② 趋势转弱｜警戒', '缩量跌破MA10 → 暂不动作，观察能否快速收回｜放量跌破MA10 → 提高警戒；同时跌破BOLL中轨时确认增强'],
+            ['③ 趋势破坏｜减仓', '放量跌破MA20 → 减仓30%-50%｜缩量跌破 → 先观察｜连续无法收回MA20 → 按趋势破坏处理；BOLL中轨同步跌破且带宽向下扩张时提高优先级'],
+            ['④ 结构破坏｜继续减仓', '放量跌破前期突破平台/关键支撑 → 继续减仓｜对子顶 + 放量 → 出60%-70%｜大阳线后放量长上影 → 减仓50%-60%；同步跌破BOLL下轨时确认增强'],
+            ['⑤ 趋势反转｜清仓', 'MA5下穿MA10/MA20且股价持续运行于MA20下方 → 原则上清仓｜关键平台放量有效跌破且无法快速收回 → 清仓｜极端放量长上影或明显见顶结构 → 立即清仓；BOLL中轨向下、下轨向下扩张且股价持续位于中轨下方时确认增强']
           ]
         }
       ],
       notes: [
-        ['核心原则', '趋势优先 → 量价确认 → 回踩优先 → 分批建仓 → 上涨加仓 → 破位减仓'],
-        ['禁止追高', '连续3根大阳线、股价距离MA20超10%-12%、放巨量长上影线、个股涨但板块弱']
+        ['核心原则', '趋势优先 → 量价确认 → 回踩优先 → BOLL辅助确认 → 分批建仓 → 上涨加仓 → 破位减仓'],
+        ['禁止追高', '连续3+根大阳线｜股价距离MA20超10%-12%｜放巨量长上影｜个股涨但板块弱｜大盘高位放量']
       ]
     },
     {
-      title: '🚪 离场纪律与决策优先级',
+      title: '📊 BOLL布林带辅助纪律',
       groups: [
         {
-          title: '1. 量价关系判断（优先级最高）',
+          title: '核心定位',
           items: [
-            ['上涨放量', '趋势确认（可加仓）'],
-            ['上涨缩量', '可持有（不追高）'],
-            ['下跌缩量', '正常回踩（观察支撑）'],
-            ['放量滞涨', '警惕高位换手（警示信号）'],
-            ['放量长上影', '警惕资金兑现（减仓信号）'],
-            ['放量跌破MA20', '趋势风险（减仓30%-50%）']
+            ['执行边界', 'BOLL只负责趋势、回踩、过热或超跌的辅助确认，不单独决定买卖'],
+            ['强趋势', '股价沿BOLL上轨运行 + 上轨持续向上 + 带宽扩大 → 强趋势持有；触碰上轨不等于卖出'],
+            ['最佳回踩', '上涨趋势中缩量回踩BOLL中轨，且MA10/MA20与中轨共振、出现止跌K线并重新转强 → 高优先级回踩加仓'],
+            ['高位风险', '股价明显冲出BOLL上轨，同时放量并出现长上影或滞涨 → 资金兑现风险增强，按原离场纪律减仓'],
+            ['超跌判断', '跌破BOLL下轨后快速收回，同时下跌量能衰减且支撑企稳 → 超跌反弹信号增强，仅允许小仓参与'],
+            ['趋势风险', '放量跌破BOLL中轨且同步跌破MA5/MA10 → 减仓信号增强｜放量跌破下轨且MA20或关键平台同步破位 → 高级别趋势破坏']
           ]
         },
         {
-          title: '2. 趋势线破坏（MA5为核心）',
+          title: 'BOLL禁止误判',
           items: [
-            ['缩量破MA5', '观察（不卖）'],
-            ['放量破MA5 + 未收回', '减仓30%（止损）'],
-            ['破位后2-3根K线不创新低', '反弹补仓（D档加仓）']
-          ]
-        },
-        {
-          title: '3. K线与形态',
-          items: [
-            ['长上影线 + 大阳线后 + 放量', '减仓50%-60%'],
-            ['对子顶 + 放量', '出60%-70%'],
-            ['极端长上影线', '立即清仓']
-          ]
-        },
-        {
-          title: '4. 决策顺序（必须按照）',
-          items: [
-            ['①', '放量跌破趋势线 → 立即减仓/清仓'],
-            ['②', '趋势线仍完整 → 判断K线形态'],
-            ['③', 'K线出现警示 → 观察是否伴随放量'],
-            ['④', '放量警示信号 → 缓慢减仓'],
-            ['⑤', '无警示信号 → 如无其他理由可持有/加仓']
+            ['触碰上轨', '不等于卖出'],
+            ['触碰下轨', '不等于买入'],
+            ['突破上轨', '不等于一定超买'],
+            ['跌破下轨', '不等于一定超卖']
           ]
         }
       ],
       notes: [
-        ['禁止追高', '连续3+大阳线｜股价距离MA20超10%｜放巨量长上影｜个股涨板块弱｜大盘高位放量'],
-        ['程序近似', '用MA5作主趋势线、5日均量作成交量基准、离场优先判趋势线+量能']
+        ['组合使用', 'BOLL必须结合趋势线、成交量、K线和关键支撑使用，绝不允许BOLL单独触发买卖']
+      ]
+    },
+    {
+      title: '⚖️ 量价关系与决策优先级',
+      groups: [
+        {
+          title: '1. 量价关系判断',
+          items: [
+            ['上涨放量', '趋势确认；仅在满足四种入场模式时执行加仓'],
+            ['上涨缩量', '可持有，不追高'],
+            ['下跌缩量', '正常回踩，观察支撑'],
+            ['放量滞涨', '警惕高位换手'],
+            ['放量长上影', '警惕资金兑现'],
+            ['放量跌破MA20', '趋势风险，减仓30%-50%']
+          ]
+        },
+        {
+          title: '2. 破位后的重新加仓',
+          items: [
+            ['反弹补仓', '破位减仓后2-3根K线不创新低 + 缩量企稳 + 重新站回趋势线 → 可考虑D档补仓'],
+            ['BOLL增强', '重新站回BOLL中轨且中轨重新向上 → 补仓信号进一步增强'],
+            ['禁止条件', '没有重新站回趋势线或BOLL中轨，不得仅因跌幅较大而补仓']
+          ]
+        },
+        {
+          title: '3. 决策优先级',
+          items: [
+            ['总优先级', '量能 + MA趋势线 ＞ 关键支撑 ＞ BOLL ＞ K线形态 ＞ 盘口'],
+            ['①', '放量跌破趋势线或关键支撑 → 优先减仓'],
+            ['②', '趋势线完整 → 判断BOLL位置与方向'],
+            ['③', 'MA10/MA20与BOLL中轨共振 → 提高回踩信号等级'],
+            ['④', '长上影或对子顶等警示 → 判断是否伴随放量'],
+            ['⑤', 'K线警示 + 放量 + BOLL异常 → 提高离场等级'],
+            ['⑥', '无破位、无放量警示 → 持有为主，不因单根K线或单独触碰BOLL上下轨操作']
+          ]
+        }
+      ],
+      notes: [
+        ['程序近似', 'MA5=短期主趋势线｜MA10=趋势警戒线｜MA20=趋势生命线｜BOLL中轨=动态趋势/回踩辅助线｜5日均量=成交量基准'],
+        ['执行约束', '离场优先判断“量能 + MA趋势线”，BOLL只负责增强或降低信号等级，绝不单独触发买卖']
       ]
     }
   ];
@@ -268,6 +290,30 @@
     return average(bars.slice(start, end).map((bar) => bar.close));
   }
 
+  function bollingerBands(bars, period = 20, multiplier = 2, offset = 0) {
+    const end = bars.length - offset;
+    const start = end - period;
+    if (start < 0) {
+      return { middle: NaN, upper: NaN, lower: NaN, bandwidth: NaN, deviation: NaN };
+    }
+    const closes = bars.slice(start, end).map((bar) => bar.close).filter(Number.isFinite);
+    if (closes.length !== period) {
+      return { middle: NaN, upper: NaN, lower: NaN, bandwidth: NaN, deviation: NaN };
+    }
+    const middle = average(closes);
+    const variance = average(closes.map((close) => (close - middle) ** 2));
+    const deviation = Math.sqrt(variance);
+    const upper = middle + multiplier * deviation;
+    const lower = middle - multiplier * deviation;
+    return {
+      middle,
+      upper,
+      lower,
+      bandwidth: middle > 0 ? (upper - lower) / middle : NaN,
+      deviation
+    };
+  }
+
   function averageVolume(bars, period, excludeCurrent = true) {
     const end = bars.length - (excludeCurrent ? 1 : 0);
     const start = end - period;
@@ -355,6 +401,12 @@
     const shape = candleShape(candidate, securityType);
     if (!shape.longUpper || shape.doji) return none;
 
+    const priorHistoricalHigh = Math.max(...prior.map((bar) => bar.high).filter(Number.isFinite));
+    const recentLow = Math.min(...prior.slice(-60).map((bar) => bar.low).filter(Number.isFinite));
+    const strictHistoricalHigh = Number.isFinite(priorHistoricalHigh) && candidate.high > priorHistoricalHigh;
+    const clearPriorRise = Number.isFinite(recentLow) && recentLow > 0 && candidate.high / recentLow - 1 >= 0.1;
+    if (!strictHistoricalHigh || !clearPriorRise) return none;
+
     const baselineVolume = average(prior.slice(-5).map((bar) => bar.volume));
     const volumeRatio = baselineVolume > 0 ? candidate.volume / baselineVolume : NaN;
     const volumeConfirmed = volumeRatio >= 1.3;
@@ -368,8 +420,33 @@
       volumeRatio,
       volumeConfirmed,
       longUpper: true,
-      doji: false
+      doji: false,
+      strictHistoricalHigh,
+      priorHistoricalHigh,
+      riseFromRecentLow: candidate.high / recentLow - 1
     };
+  }
+
+  function sustainedBelowMovingAverage(bars, period, count = 3) {
+    if (!Array.isArray(bars) || bars.length < period + count) return false;
+    for (let offset = 0; offset < count; offset += 1) {
+      const bar = bars.at(-(offset + 1));
+      const line = movingAverage(bars, period, offset);
+      if (!bar || !Number.isFinite(line) || bar.close >= line) return false;
+    }
+    return true;
+  }
+
+  function consecutiveLowerLowsAfterMa5Break(bars, count = 3) {
+    if (!Array.isArray(bars) || bars.length < 8 || count < 2) return false;
+    const sample = bars.slice(-count);
+    const lowerLows = sample.slice(1).every((bar, index) => bar.low < sample[index].low * 0.998);
+    const hadBreak = sample.some((bar, index) => {
+      const offset = sample.length - index - 1;
+      const line = movingAverage(bars, 5, offset);
+      return Number.isFinite(line) && bar.close < line;
+    });
+    return lowerLows && hadBreak;
   }
 
   function volumeLevel(ratio) {
@@ -403,6 +480,11 @@
     const ma10 = movingAverage(series, 10);
     const ma20 = movingAverage(series, 20);
     const ma60 = movingAverage(series, 60);
+    const previousMa5 = movingAverage(series, 5, 1);
+    const previousMa10 = movingAverage(series, 10, 1);
+    const previousMa20 = movingAverage(series, 20, 1);
+    const boll = bollingerBands(series);
+    const previousBoll = bollingerBands(series, 20, 2, 1);
     const previousHigh20 = prior.length >= 20 ? Math.max(...prior.slice(-20).map((bar) => bar.high)) : NaN;
     const previousLow20 = prior.length >= 20 ? Math.min(...prior.slice(-20).map((bar) => bar.low)) : NaN;
     const change = finiteNumber(quote.previous_close ?? quote.prev_close) > 0
@@ -418,6 +500,21 @@
       ma10,
       ma20,
       ma60,
+      previousMa5,
+      previousMa10,
+      previousMa20,
+      bollMiddle: boll.middle,
+      bollUpper: boll.upper,
+      bollLower: boll.lower,
+      bollBandwidth: boll.bandwidth,
+      previousBollMiddle: previousBoll.middle,
+      previousBollUpper: previousBoll.upper,
+      previousBollLower: previousBoll.lower,
+      previousBollBandwidth: previousBoll.bandwidth,
+      bollMiddleRising: boll.middle > previousBoll.middle,
+      bollUpperRising: boll.upper > previousBoll.upper,
+      bollLowerFalling: boll.lower < previousBoll.lower,
+      bollBandwidthExpanding: boll.bandwidth > previousBoll.bandwidth,
       previousHigh20,
       previousLow20,
       volumePeriod,
@@ -562,9 +659,10 @@
 
   function detectDAdd(indicators) {
     const bars = indicators.series;
-    if (bars.length < 25 || !indicators.current || indicators.current.close <= indicators.current.open) return false;
+    const none = { active: false, bollEnhanced: false };
+    if (bars.length < 25 || !indicators.current || indicators.current.close <= indicators.current.open) return none;
     const priorThree = bars.slice(-4, -1);
-    if (priorThree.length < 2) return false;
+    if (priorThree.length < 2) return none;
     const lows = priorThree.map((bar) => bar.low);
     const didNotMakeNewLow = lows.slice(1).every((low, index) => low >= lows[index] * 0.998);
     const hadBreak = priorThree.some((bar, index) => {
@@ -572,7 +670,19 @@
       const ma5 = movingAverage(bars, 5, offset);
       return Number.isFinite(ma5) && bar.close < ma5;
     });
-    return hadBreak && didNotMakeNewLow;
+    const shrink = Number.isFinite(indicators.volumeRatio) && indicators.volumeRatio <= 0.8;
+    const recoveredMa5 = indicators.current.close >= indicators.ma5;
+    const recoveredBollMiddle = indicators.current.close >= indicators.bollMiddle;
+    const active = hadBreak && didNotMakeNewLow && shrink && recoveredMa5;
+    return {
+      active,
+      hadBreak,
+      didNotMakeNewLow,
+      shrink,
+      recoveredMa5,
+      recoveredBollMiddle,
+      bollEnhanced: active && recoveredBollMiddle && indicators.bollMiddleRising
+    };
   }
 
   function resolveSignals(signals) {
@@ -626,14 +736,62 @@
       ?? marketData.quote?.breakout_support
     );
     const structureBroken = Number.isFinite(keySupport) && keySupport > 0 && current.close < keySupport;
+    const structureBreakPersistent = structureBroken
+      && indicators.series.slice(-2).every((bar) => bar.close < keySupport);
+    const sustainedBelowMa20 = sustainedBelowMovingAverage(indicators.series, 20, 3);
+    const lowerLowsAfterBreak = consecutiveLowerLowsAfterMa5Break(indicators.series, 3);
+    const ma5CrossUnderMa10 = indicators.previousMa5 >= indicators.previousMa10
+      && indicators.ma5 < indicators.ma10;
+    const ma5CrossUnderMa20 = indicators.previousMa5 >= indicators.previousMa20
+      && indicators.ma5 < indicators.ma20;
+    const aboveBollUpper = Number.isFinite(indicators.bollUpper) && current.close > indicators.bollUpper;
+    const belowBollMiddle = Number.isFinite(indicators.bollMiddle) && current.close < indicators.bollMiddle;
+    const belowBollLower = Number.isFinite(indicators.bollLower) && current.close < indicators.bollLower;
+    const bollUpperTrend = Number.isFinite(indicators.bollUpper)
+      && current.close >= indicators.bollUpper * 0.985
+      && indicators.bollUpperRising
+      && indicators.bollBandwidthExpanding;
+    const bollMiddleIntact = Number.isFinite(indicators.bollMiddle)
+      && current.close >= indicators.bollMiddle
+      && indicators.bollMiddleRising;
+    const bollMiddleBreakEnhanced = belowBollMiddle && indicators.bollBandwidthExpanding;
+    const bollLowerBreakEnhanced = belowBollLower
+      && indicators.bollLowerFalling
+      && indicators.bollBandwidthExpanding;
 
-    if (shapeExitEligible && patterns.currentShape.extremeUpper) {
+    if (shapeExitEligible && patterns.currentShape.extremeUpper && hugeVolume) {
       signals.push(makeSignal(
         'clear',
         'extreme_upper_shadow',
-        '极端长上影线·立即清仓',
-        '出现极端长上影线，按K线与形态纪律立即清仓',
-        { priority: EXIT_PRIORITIES.extremeUpper }
+        '极端放量长上影·立即清仓',
+        `出现极端长上影线并达到放巨量标准（量比${volumeRatio.toFixed(2)}），按纪律立即清仓`,
+        {
+          priority: EXIT_PRIORITIES.extremeUpper,
+          details: { bollEnhanced: aboveBollUpper }
+        }
+      ));
+    }
+
+    if ((ma5CrossUnderMa10 || ma5CrossUnderMa20) && sustainedBelowMa20) {
+      signals.push(makeSignal(
+        'clear',
+        'ma5_cross_sustained_below_ma20',
+        '趋势反转·清仓剩余仓位',
+        `MA5下穿MA10或MA20，且股价连续运行于MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}下方${bollMiddleBreakEnhanced ? '；BOLL中轨同步转弱，反转确认增强' : ''}`,
+        {
+          priority: 970,
+          details: { bollEnhanced: bollMiddleBreakEnhanced }
+        }
+      ));
+    }
+
+    if (lowerLowsAfterBreak) {
+      signals.push(makeSignal(
+        'clear',
+        'lower_lows_after_break',
+        '破位后持续创新低·全部离场',
+        '跌破MA5后连续2-3根K线低点越来越低，按纪律全部离场',
+        { priority: 950 }
       ));
     }
 
@@ -653,18 +811,43 @@
         'reduce_50_60',
         'long_upper_after_big_bull_volume',
         '长上影线伴随放量·减仓50%-60%',
-        `大阳线后出现长上影线并伴随放量，量比${volumeRatio.toFixed(2)}`,
-        { priority: EXIT_PRIORITIES.warningPatternVolume }
+        `大阳线后出现长上影线并伴随放量，量比${volumeRatio.toFixed(2)}${aboveBollUpper ? '；同时冲出BOLL上轨，资金兑现风险增强' : ''}`,
+        {
+          priority: EXIT_PRIORITIES.warningPatternVolume + (aboveBollUpper ? 5 : 0),
+          details: { bollEnhanced: aboveBollUpper }
+        }
+      ));
+    }
+
+    if (shapeExitEligible
+      && expandedVolume
+      && patterns.currentShape.longUpper
+      && !patterns.previousBigBull
+      && !patterns.currentShape.extremeUpper) {
+      signals.push(makeSignal(
+        'warning',
+        'volume_long_upper_warning',
+        '放量长上影·警惕资金兑现',
+        `出现放量长上影线，量比${volumeRatio.toFixed(2)}${aboveBollUpper ? '，且冲出BOLL上轨，风险确认增强' : ''}`,
+        {
+          priority: VOLUME_PRICE_PRIORITIES.stagnation + (aboveBollUpper ? 5 : 0),
+          details: { bollEnhanced: aboveBollUpper }
+        }
       ));
     }
 
     if (falling && expandedVolume && structureBroken) {
       signals.push(makeSignal(
-        'reduce_30_50',
-        'volume_break_key_support',
-        '结构破坏·继续减仓',
-        `放量跌破前期突破平台或关键支撑${keySupport.toFixed(indicators.priceDigits)}，按纪律继续减仓`,
-        { priority: EXIT_PRIORITIES.structureBreak, details: { keySupport } }
+        structureBreakPersistent ? 'clear' : 'reduce_30_50',
+        structureBreakPersistent ? 'persistent_volume_break_key_support' : 'volume_break_key_support',
+        structureBreakPersistent ? '关键平台有效跌破·清仓' : '结构破坏·继续减仓',
+        structureBreakPersistent
+          ? `放量跌破关键支撑${keySupport.toFixed(indicators.priceDigits)}后连续无法快速收回，按纪律清仓${bollLowerBreakEnhanced ? '；BOLL下轨同步破位，结构破坏确认增强' : ''}`
+          : `放量跌破前期突破平台或关键支撑${keySupport.toFixed(indicators.priceDigits)}，按纪律继续减仓${bollLowerBreakEnhanced ? '；BOLL下轨同步破位，结构破坏确认增强' : ''}`,
+        {
+          priority: structureBreakPersistent ? 960 : EXIT_PRIORITIES.structureBreak + (bollLowerBreakEnhanced ? 5 : 0),
+          details: { keySupport, bollEnhanced: bollLowerBreakEnhanced }
+        }
       ));
     }
 
@@ -673,8 +856,11 @@
         'reduce_30_50',
         'volume_break_ma20',
         '趋势破坏·减仓30%-50%',
-        `放量跌破MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}`,
-        { priority: EXIT_PRIORITIES.ma20Break }
+        `放量跌破MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}${bollMiddleBreakEnhanced ? '；BOLL中轨同步跌破且带宽扩张，减仓优先级提高' : ''}`,
+        {
+          priority: EXIT_PRIORITIES.ma20Break + (bollMiddleBreakEnhanced ? 5 : 0),
+          details: { bollEnhanced: bollMiddleBreakEnhanced }
+        }
       ));
     }
     else if (falling && expandedVolume && belowMa5) {
@@ -682,8 +868,11 @@
         'reduce_30',
         'volume_break_ma5',
         '放量破MA5且未收回·减仓30%',
-        `当前价未收回MA5 ${indicators.ma5.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}，按止损纪律减仓30%`,
-        { priority: EXIT_PRIORITIES.ma5Break }
+        `当前价未收回MA5 ${indicators.ma5.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}，按止损纪律减仓30%${bollMiddleIntact ? '；BOLL中轨仍向上且未破坏，仅降低短期警报等级，不改变本次纪律动作' : ''}`,
+        {
+          priority: EXIT_PRIORITIES.ma5Break - (bollMiddleIntact ? 5 : 0),
+          details: { bollReduced: bollMiddleIntact }
+        }
       ));
     }
     else if (falling && expandedVolume && belowMa10) {
@@ -691,8 +880,11 @@
         'warning',
         'volume_break_ma10_observe',
         '趋势转弱·放量跌破MA10观察',
-        `放量跌破MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}，按纪律观察`,
-        { priority: EXIT_PRIORITIES.trendWarning }
+        `放量跌破MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}，按纪律进入趋势警戒${bollMiddleBreakEnhanced ? '；BOLL中轨同步跌破，转弱确认增强' : ''}`,
+        {
+          priority: EXIT_PRIORITIES.trendWarning + (bollMiddleBreakEnhanced ? 5 : 0),
+          details: { bollEnhanced: bollMiddleBreakEnhanced }
+        }
       ));
     }
     else if (shrink && belowMa20) {
@@ -728,8 +920,11 @@
         'warning',
         'volume_stagnation',
         '放量滞涨·警惕高位换手',
-        `量比${volumeRatio.toFixed(2)}达到放量标准，但价格滞涨`,
-        { priority: VOLUME_PRICE_PRIORITIES.stagnation }
+        `量比${volumeRatio.toFixed(2)}达到放量标准，但价格滞涨${aboveBollUpper ? '；同时位于BOLL上轨外，风险增强' : ''}`,
+        {
+          priority: VOLUME_PRICE_PRIORITIES.stagnation + (aboveBollUpper ? 5 : 0),
+          details: { bollEnhanced: aboveBollUpper }
+        }
       ));
     }
     const supportLevels = [
@@ -757,15 +952,28 @@
       && current.close > current.open
       && current.close > previous.close;
     const pullbackConfirmed = currentPullbackConfirmed || previousPullbackConfirmed;
+    const pullbackSupport = touchedSupport || previousPullback.support;
+    const pullbackBollMiddle = currentPullbackConfirmed ? indicators.bollMiddle : indicators.previousBollMiddle;
+    const bollMiddleResonance = Boolean(pullbackSupport)
+      && Number.isFinite(pullbackBollMiddle)
+      && Math.abs(pullbackSupport.value - pullbackBollMiddle) / pullbackBollMiddle <= 0.025;
     const trendBreakout = Number.isFinite(indicators.previousHigh20)
       && current.close > indicators.previousHigh20
       && breakoutVolume
       && indicators.bullishAlignment;
+    const breakoutBollEnhanced = trendBreakout
+      && aboveBollUpper
+      && indicators.bollUpperRising
+      && indicators.bollBandwidthExpanding;
     const volumeVsPrevious = previous?.volume > 0 ? current.volume / previous.volume : NaN;
     const reversal = patterns.morningStar
       && Number.isFinite(indicators.previousHigh20)
       && current.close > indicators.previousHigh20
       && volumeVsPrevious > 1;
+    const reversalBollEnhanced = reversal
+      && Number.isFinite(indicators.previousBollLower)
+      && previous.low <= indicators.previousBollLower * 1.02
+      && current.close >= indicators.bollMiddle;
     const recentLosses = indicators.series.slice(-4).map((bar, index, sample) => {
       if (index === 0) return NaN;
       return (sample[index - 1].close - bar.close) / sample[index - 1].close;
@@ -777,16 +985,22 @@
     const oversold = (indicators.rsi14 < 30 || indicators.deviationMa20 < -0.10)
       && declineFading
       && context.sectorStable === true;
+    const oversoldBollEnhanced = oversold
+      && ((current.low < indicators.bollLower && current.close >= indicators.bollLower)
+        || (previous.low < indicators.previousBollLower && current.close >= indicators.bollLower));
     const dAdd = detectDAdd(indicators);
 
     if (pullbackConfirmed) {
-      const support = touchedSupport || previousPullback.support;
       addCandidates.push(makeSignal(
         'add',
         'entry_pullback_confirmed',
-        '②回踩确认·第2档加仓（20%-30%）',
-        `缩量回踩${support.label}并出现锤子线或吞没形态，随后重新转强，按优先级最高的回踩纪律加仓20%-30%`,
-        { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackConfirmed, details: { mode: 'pullback', allocation: '20%-30%' } }
+        bollMiddleResonance ? '②回踩确认·BOLL共振优先加仓' : '②回踩确认·第2档加仓（20%-30%）',
+        `缩量回踩${pullbackSupport.label}并出现锤子线或吞没形态，随后重新转强，按优先级最高的回踩纪律加仓20%-30%${bollMiddleResonance ? '；该支撑与BOLL中轨共振，信号等级提高' : ''}`,
+        {
+          scope: 'entry',
+          priority: ENTRY_PRIORITIES.pullbackConfirmed + (bollMiddleResonance ? 10 : 0),
+          details: { mode: 'pullback', allocation: '20%-30%', bollEnhanced: bollMiddleResonance }
+        }
       ));
     }
     if (trendBreakout) {
@@ -794,8 +1008,12 @@
         'add',
         'entry_breakout',
         '①趋势突破·第1档建仓（30%-40%）',
-        `突破20日新高，量比${volumeRatio.toFixed(2)}处于1.3～1.8倍，且MA5>MA10>MA20`,
-        { scope: 'entry', priority: ENTRY_PRIORITIES.trendBreakout, details: { mode: 'breakout', allocation: '30%-40%' } }
+        `突破20日新高，量比${volumeRatio.toFixed(2)}处于1.3～1.8倍，且MA5>MA10>MA20${breakoutBollEnhanced ? '；同时突破BOLL上轨、上轨向上且带宽扩大，突破有效性增强' : ''}`,
+        {
+          scope: 'entry',
+          priority: ENTRY_PRIORITIES.trendBreakout + (breakoutBollEnhanced ? 10 : 0),
+          details: { mode: 'breakout', allocation: '30%-40%', bollEnhanced: breakoutBollEnhanced }
+        }
       ));
     }
     if (reversal) {
@@ -803,8 +1021,12 @@
         'add',
         'entry_reversal',
         '③反转形态·第3档加仓（10%-20%）',
-        '早晨星后反弹突破前高，并伴随成交量改善，按纪律加仓10%-20%',
-        { scope: 'entry', priority: ENTRY_PRIORITIES.reversal, details: { mode: 'reversal', allocation: '10%-20%' } }
+        `早晨星后反弹突破前高，并伴随成交量改善，按纪律加仓10%-20%${reversalBollEnhanced ? '；同时从BOLL下轨附近止跌并站回中轨，反转确认增强' : ''}`,
+        {
+          scope: 'entry',
+          priority: ENTRY_PRIORITIES.reversal + (reversalBollEnhanced ? 10 : 0),
+          details: { mode: 'reversal', allocation: '10%-20%', bollEnhanced: reversalBollEnhanced }
+        }
       ));
     }
     if (oversold) {
@@ -812,26 +1034,38 @@
         'add',
         'entry_oversold',
         '④超跌反弹·仅≤20%小仓',
-        '股价超跌、下跌衰减且板块企稳，仅按纪律使用不超过20%的小仓位',
-        { scope: 'entry', priority: ENTRY_PRIORITIES.oversold, details: { mode: 'oversold', allocation: '≤20%' } }
+        `股价超跌、下跌衰减且板块企稳，仅按纪律使用不超过20%的小仓位${oversoldBollEnhanced ? '；跌破BOLL下轨后快速收回，超跌反弹确认增强' : ''}`,
+        {
+          scope: 'entry',
+          priority: ENTRY_PRIORITIES.oversold + (oversoldBollEnhanced ? 10 : 0),
+          details: { mode: 'oversold', allocation: '≤20%', bollEnhanced: oversoldBollEnhanced }
+        }
       ));
     }
-    if (dAdd) {
+    if (dAdd.active) {
       addCandidates.push(makeSignal(
         'd_add',
         'entry_d_add',
         '破位后不创新低·D档加仓',
-        '破位后2-3根K线不创新低，当前反弹收阳，按纪律执行D档反弹补仓',
-        { scope: 'entry', priority: ENTRY_PRIORITIES.dAdd, details: { mode: 'd_add' } }
+        `破位后2-3根K线不创新低、缩量企稳并重新站回趋势线，当前反弹收阳，按纪律执行D档补仓${dAdd.bollEnhanced ? '；同时站回BOLL中轨且中轨向上，补仓确认增强' : ''}`,
+        {
+          scope: 'entry',
+          priority: ENTRY_PRIORITIES.dAdd + (dAdd.bollEnhanced ? 10 : 0),
+          details: { mode: 'd_add', bollEnhanced: dAdd.bollEnhanced }
+        }
       ));
     }
     if (rising && expandedVolume) {
-      addCandidates.push(makeSignal(
-        'add',
+      signals.push(makeSignal(
+        'hold',
         'volume_price_up_volume',
-        '上涨放量·趋势确认可加仓',
-        `上涨伴随放量，量比${volumeRatio.toFixed(2)}，趋势确认后可按纪律加仓`,
-        { scope: 'entry', priority: 420, details: { mode: 'volume_confirmation' } }
+        bollUpperTrend ? '强趋势·沿BOLL上轨持有' : '上涨放量·趋势确认',
+        `上涨伴随放量，量比${volumeRatio.toFixed(2)}，趋势得到确认；只有同时满足四种入场模式之一才执行加仓${bollUpperTrend ? '；股价沿BOLL上轨运行、上轨向上且带宽扩大，强趋势持有' : ''}`,
+        {
+          scope: 'entry',
+          priority: 190,
+          details: { bollEnhanced: bollUpperTrend }
+        }
       ));
     }
 
@@ -905,6 +1139,14 @@
       ma10: round(indicators.ma10),
       ma20: round(indicators.ma20),
       ma60: round(indicators.ma60),
+      bollMiddle: round(indicators.bollMiddle),
+      bollUpper: round(indicators.bollUpper),
+      bollLower: round(indicators.bollLower),
+      bollBandwidth: round(indicators.bollBandwidth, 4),
+      bollMiddleRising: indicators.bollMiddleRising,
+      bollUpperRising: indicators.bollUpperRising,
+      bollLowerFalling: indicators.bollLowerFalling,
+      bollBandwidthExpanding: indicators.bollBandwidthExpanding,
       volumeRatio: round(indicators.volumeRatio, 2),
       volumeLevel: indicators.volumeLevel,
       volumePeriod: indicators.volumePeriod,
@@ -936,6 +1178,7 @@
     validBar,
     buildSeries,
     movingAverage,
+    bollingerBands,
     averageVolume,
     relativeStrengthIndex,
     candleShape,
@@ -953,3 +1196,4 @@
     publicIndicators
   };
 });
+
