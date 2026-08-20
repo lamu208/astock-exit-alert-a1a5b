@@ -26,10 +26,8 @@
 /* V2 cloud-monitor status and action palette. */
 .connection-state.warning i{background:#e9a11b}
 .market-state{display:inline-flex;align-items:center;min-height:28px;border:1px solid #dce2ea;border-radius:999px;padding:3px 10px;background:#fff;color:#667184;font-size:12px;white-space:nowrap}
-.market-state.bull{border-color:#bfe6d3;background:#f1fbf6;color:#168757}
-.market-state.sideways{border-color:#f0d9a8;background:#fffaf0;color:#b97908}
-.market-state.bear{border-color:#f2bdc0;background:#fff5f5;color:#cf3038}
-.market-state.unknown{color:#788292}
+.market-state.neutral{border-color:#cbd5e1;background:#f8fafc;color:#475569}
+.market-state.risk{border-color:#f2bdc0;background:#fff5f5;color:#cf3038}
 .stock-card.tone-add{border-left-color:#7a43d2}
 .stock-card.tone-warning{border-left-color:#e7a21a}
 .stock-card.tone-reduce{border-left-color:#f18716}
