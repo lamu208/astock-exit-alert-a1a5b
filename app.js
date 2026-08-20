@@ -166,7 +166,6 @@ function actionIcon(action) {
   if (action === 'clear') return '✕';
   if (action.startsWith('reduce') || action.startsWith('exit')) return '−';
   if (action === 'add' || action === 'd_add') return '↗';
-  if (action === 'wait_add') return '⌛';
   if (action === 'warning') return '⚠';
   if (action === 'unavailable') return '○';
   return '▮▮';
@@ -178,7 +177,7 @@ function signalLabel(signal) {
 
 function tradeSide(signal) {
   const action = signal?.action || '';
-  if (action === 'add' || action === 'd_add' || action === 'wait_add') {
+  if (action === 'add' || action === 'd_add') {
     return { label: '\u5efa\u8bae\u52a0\u4ed3', tone: 'low-buy' };
   }
   if (action === 'clear' || action.startsWith('reduce') || action.startsWith('exit')) {
@@ -200,7 +199,7 @@ function stockKey(stock) {
 function evaluatePayload(payload) {
   const market = payload.market?.data_quality?.valid
     ? core.evaluateMarketEnvironment(payload.market)
-    : { status: 'unknown', effectiveStatus: 'unknown', risk: false, highVolume: false, reason: payload.market?.data_quality?.missing?.join('、') || '大盘数据不可用' };
+    : { status: 'neutral', effectiveStatus: 'neutral', risk: false, highVolume: false, reason: payload.market?.data_quality?.missing?.join('、') || '大盘数据不可用' };
   state.market = market;
   state.stocks = (payload.stocks || []).map((stock) => ({ ...stock, evaluation: core.evaluateInstrument(stock, { market }) }));
 }
@@ -233,10 +232,10 @@ function renderHeader() {
 
   $('#header-refresh-time').textContent = state.lastSuccess ? `更新于 ${formatTime(state.lastSuccess)}` : '等待更新';
   const market = state.market;
-  const marketText = market?.effectiveStatus === 'bull' ? '大盘多头' : market?.effectiveStatus === 'bear' ? '大盘空头' : market?.effectiveStatus === 'sideways' ? '大盘震荡' : '大盘未确认';
+  const marketText = market?.highVolume ? '大盘高位放量' : '纪律已加载';
   const marketElement = $('#market-state');
   marketElement.textContent = marketText;
-  marketElement.className = `market-state ${market?.effectiveStatus || 'unknown'}`;
+  marketElement.className = `market-state ${market?.highVolume ? 'risk' : 'neutral'}`;
   $('#last-refresh').textContent = state.lastSuccess
     ? `${state.stale ? '最后成功数据' : '更新于'} ${new Date(state.lastSuccess).toLocaleString('zh-CN', { hour12: false })} · ${state.payload?.data_source || '云端行情'} · 网页打开时监控`
     : '尚未取得有效行情';
