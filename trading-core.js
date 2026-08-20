@@ -551,9 +551,9 @@
     const volumePeriod = 5;
     const baselineVolume = averageVolume(series, volumePeriod, true);
     const progress = isTradingSession(marketData.source_time) ? tradingProgress(marketData.source_time) : 1;
-    const projectedVolume = current && progress > 0 ? current.volume / progress : NaN;
-    const volumeRatio = baselineVolume > 0 ? projectedVolume / baselineVolume : NaN;
-    const volumeConfirmationRatio = baselineVolume > 0 && current ? current.volume / baselineVolume : NaN;
+    const projectedVolume = current ? current.volume : NaN;
+    const volumeRatio = baselineVolume > 0 && current ? current.volume / baselineVolume : NaN;
+    const volumeConfirmationRatio = volumeRatio;
     const historicalMaxVolume = prior.length ? Math.max(...prior.map((bar) => bar.volume)) : NaN;
     const historicalVolumeHigh = Boolean(current
       && current.volume > 0
@@ -1193,3 +1193,4 @@
     publicIndicators
   };
 });
+
