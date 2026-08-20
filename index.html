@@ -10,7 +10,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="market-api-base" content="https://astock-exit-alert-api.vercel.app">
-  <meta name="app-build" content="20260820-signal-consistency1">
+  <meta name="app-build" content="20260820-final-rules-only2">
   <link rel="manifest" href="./manifest.webmanifest">
   <title>智能盯盘</title>
   <script>
@@ -50,7 +50,7 @@
           <div id="data-status" class="connection-state loading"><i></i><span>刷新中...</span></div>
           <span class="status-divider">|</span>
           <span id="header-refresh-time">等待更新</span>
-          <span id="market-state" class="market-state unknown">大盘未确认</span>
+          <span id="market-state" class="market-state neutral">纪律已加载</span>
         </div>
         <button id="discipline-button" class="discipline-button" type="button">纪律</button>
       </header>
@@ -118,7 +118,7 @@
       <section class="detail-section"><h3>关键行情指标</h3><div id="detail-metrics" class="metric-grid"></div></section>
       <p id="detail-source" class="detail-source">—</p>
       <section class="detail-section"><h3>加仓 / 减仓 / 离场原因</h3><div id="detail-reasons" class="reason-list"></div></section>
-      <section class="detail-section muted-note"><p>预警用于纪律提醒，不构成投资建议；请结合自身风险承受能力独立决策。</p></section>
+      <section class="detail-section muted-note"><p>预警用于纪律提醒，不构成任何投资建议；请结合自身风险承受能力独立决策。</p></section>
       <button id="remove-detail-stock" class="remove-stock" type="button">从自选股移除</button>
     </section>
   </div>
@@ -127,7 +127,7 @@
   <script>
     (() => {
       const token = window.__ASTOCK_ASSET_TOKEN__ || Date.now().toString(36);
-      const sources = ['./trading-core.js', './discipline-release-20260819.js', './direct-market.js', './app.js'];
+      const sources = ['./trading-core.js', './direct-market.js', './app.js'];
       const loadScript = (source) => new Promise((resolve, reject) => {
         const scriptUrl = new URL(source, document.baseURI);
         scriptUrl.searchParams.set('__latest', token);
