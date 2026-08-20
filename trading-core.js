@@ -9,32 +9,22 @@
     hold_no_sell: { label: '不卖观察', tone: 'hold', priority: 120 },
     add: { label: '建议加仓', tone: 'add', priority: 400 },
     d_add: { label: 'D档加仓', tone: 'add', priority: 390 },
-    wait_add: { label: '等待加仓确认', tone: 'warning', priority: 440 },
     warning: { label: '警示观察', tone: 'warning', priority: 500 },
-    reduce_partial: { label: '减仓少部分', tone: 'reduce', priority: 700 },
     reduce_30: { label: '减仓30%', tone: 'reduce', priority: 710 },
-    reduce_30_40: { label: '减仓30%-40%', tone: 'reduce', priority: 735 },
     reduce_30_50: { label: '减仓30%-50%', tone: 'reduce', priority: 760 },
-    reduce_half: { label: '出一半', tone: 'reduce', priority: 850 },
     reduce_50_60: { label: '减仓50%-60%', tone: 'reduce', priority: 820 },
     exit_60_70: { label: '出60%-70%', tone: 'reduce', priority: 880 },
-    exit_over_half: { label: '出一半以上', tone: 'reduce', priority: 900 },
     clear: { label: '立即清仓', tone: 'clear', priority: 1000 }
   };
 
   const EXIT_PRIORITIES = {
-    trendReversal: 1000,
-    postBreakLowerLows: 990,
     extremeUpper: 980,
-    tapeWarningVolume: 900,
     pairedTop: 880,
-    klineDoubleTop: 875,
     warningPatternVolume: 820,
     structureBreak: 800,
     ma20Break: 760,
     ma10Break: 735,
     ma5Break: 710,
-    warningPatternShrink: 705,
     trendWarning: 540,
     shrinkObserve: 180
   };
@@ -42,15 +32,12 @@
   const ENTRY_PRIORITIES = {
     pullbackConfirmed: 470,
     trendBreakout: 450,
-    pullbackWaiting: 175,
-    localBreakout: 440,
     reversal: 430,
     oversold: 410,
     dAdd: 390
   };
 
   const VOLUME_PRICE_PRIORITIES = {
-    risingVolume: 105,
     stagnation: 520,
     fallingShrink: 170,
     risingShrink: 160
@@ -84,7 +71,7 @@
             ['② 趋势转弱', '缩量跌破MA10 → 暂不动作｜放量跌破MA10 → 观察'],
             ['③ 趋势破坏', '放量跌破MA20 → 减仓30%-50%｜缩量跌破 → 先观察'],
             ['④ 结构破坏', '放量跌破前期突破平台/关键支撑 → 继续减仓'],
-            ['⑤ 趋势反转', 'MA5下穿MA10（死叉）+ 放量 → 清仓剩余仓位']
+            ['⑤ 趋势反转', 'MA5']
           ]
         }
       ],
@@ -358,32 +345,18 @@
 
   function detectPairedPriceTop(bars, securityType = 'STOCK') {
     const none = { active: false, confirmed: false };
-    if (!Array.isArray(bars) || bars.length < 21) return none;
+    if (!Array.isArray(bars) || bars.length < 6) return none;
 
     const lastIndex = bars.length - 1;
-    const riseThreshold = securityType === 'ETF' ? 0.08 : 0.15;
     const candidate = bars[lastIndex];
     if (!isPairedPriceTop(candidate.high, securityType)) return none;
 
     const prior = bars.slice(0, lastIndex);
-    const stage = prior.slice(-120);
-    const historicalHigh = Math.max(...prior.map((bar) => bar.high));
-    const stageLow = Math.min(...stage.map((bar) => bar.low));
-    const riseFromStageLow = stageLow > 0 ? candidate.high / stageLow - 1 : 0;
-    const isHistoricalHigh = historicalHigh > 0 && candidate.high > historicalHigh;
-
-    // 只认明显上涨后严格创可用历史新高；未创新高或反弹途中不提示。
-    if (!isHistoricalHigh || riseFromStageLow < riseThreshold) return none;
-
     const shape = candleShape(candidate, securityType);
     if (!shape.longUpper || shape.doji) return none;
 
     const baselineVolume = average(prior.slice(-5).map((bar) => bar.volume));
     const volumeRatio = baselineVolume > 0 ? candidate.volume / baselineVolume : NaN;
-    const historicalMaxVolume = Math.max(...prior.map((bar) => bar.volume));
-    const historicalVolumeHigh = candidate.volume > 0
-      && historicalMaxVolume > 0
-      && candidate.volume > historicalMaxVolume;
     const volumeConfirmed = volumeRatio >= 1.3;
     if (!volumeConfirmed) return none;
 
@@ -394,46 +367,9 @@
       age: 0,
       volumeRatio,
       volumeConfirmed,
-      historicalVolumeHigh,
       longUpper: true,
-      doji: false,
-      riseFromStageLow,
-      historicalHigh
+      doji: false
     };
-  }
-
-  function isKlineDoubleTop(bars, securityType = 'STOCK') {
-    if (!Array.isArray(bars) || bars.length < 8) return false;
-    const currentIndex = bars.length - 1;
-    const current = bars[currentIndex];
-    const previous = bars[currentIndex - 1];
-    const priorHistoricalHigh = Math.max(...bars.slice(0, currentIndex).map((bar) => bar.high));
-    if (!(current.high > priorHistoricalHigh)) return false;
-    const currentShape = candleShape(current, securityType);
-    const secondPeakRejected = current.close < current.open
-      || current.close < previous.close
-      || currentShape.longUpper;
-    if (!secondPeakRejected) return false;
-
-    const firstCandidate = Math.max(1, currentIndex - 20);
-    const lastCandidate = currentIndex - 3;
-    for (let peakIndex = firstCandidate; peakIndex <= lastCandidate; peakIndex += 1) {
-      const peak = bars[peakIndex];
-      const left = bars[peakIndex - 1];
-      const right = bars[peakIndex + 1];
-      const localPeak = peak.high >= left.high
-        && peak.high >= right.high
-        && (peak.high > left.high || peak.high > right.high);
-      if (!localPeak) continue;
-
-      const peakDifference = Math.abs(peak.high - current.high) / Math.max(peak.high, current.high);
-      if (peakDifference > 0.01) continue;
-
-      const trough = Math.min(...bars.slice(peakIndex + 1, currentIndex).map((bar) => bar.low));
-      const lowerPeak = Math.min(peak.high, current.high);
-      if ((lowerPeak - trough) / lowerPeak >= 0.03) return true;
-    }
-    return false;
   }
 
   function volumeLevel(ratio) {
@@ -467,8 +403,6 @@
     const ma10 = movingAverage(series, 10);
     const ma20 = movingAverage(series, 20);
     const ma60 = movingAverage(series, 60);
-    const previousMa5 = movingAverage(series, 5, 1);
-    const previousMa10 = movingAverage(series, 10, 1);
     const previousHigh20 = prior.length >= 20 ? Math.max(...prior.slice(-20).map((bar) => bar.high)) : NaN;
     const previousLow20 = prior.length >= 20 ? Math.min(...prior.slice(-20).map((bar) => bar.low)) : NaN;
     const change = finiteNumber(quote.previous_close ?? quote.prev_close) > 0
@@ -484,8 +418,6 @@
       ma10,
       ma20,
       ma60,
-      previousMa5,
-      previousMa10,
       previousHigh20,
       previousLow20,
       volumePeriod,
@@ -501,8 +433,7 @@
       change,
       rsi14: relativeStrengthIndex(series, 14),
       deviationMa20: ma20 > 0 && current ? current.close / ma20 - 1 : NaN,
-      bullishAlignment: ma5 > ma10 && ma10 > ma20 && (securityType !== 'ETF' || !Number.isFinite(ma60) || ma20 > ma60),
-      deathCross: previousMa5 >= previousMa10 && ma5 < ma10
+      bullishAlignment: ma5 > ma10 && ma10 > ma20
     };
   }
 
@@ -562,64 +493,32 @@
   }
 
   function evaluateMarketEnvironment(marketData) {
-    if (!marketData) return { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: '大盘数据不可用，暂停新增仓位' };
+    const neutral = { status: 'neutral', effectiveStatus: 'neutral', risk: false, highVolume: false, reason: '大盘未触发高位放量' };
+    if (!marketData) return { ...neutral, reason: '大盘数据不可用，仅跳过“大盘高位放量”检查' };
     const decisionData = dailyMarketDecisionData(marketData);
     const indicators = calculateIndicators(decisionData);
     const quality = validateMarketData(decisionData, indicators);
-    if (!quality.valid || indicators.series.length < 25) return { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: `${quality.missing.join('、') || '大盘数据不足'}，暂停新增仓位` };
-    const ma20FiveDaysAgo = movingAverage(indicators.series, 20, 5);
-    const slope = ma20FiveDaysAgo > 0 ? (indicators.ma20 / ma20FiveDaysAgo - 1) / 5 : 0;
-    const ma20NeutralBand = 0.005;
-    const ma20Distance = indicators.current.close / indicators.ma20 - 1;
-    let status = 'sideways';
-    if (ma20Distance > ma20NeutralBand && indicators.ma5 > indicators.ma10) status = 'bull';
-    else if (ma20Distance < -ma20NeutralBand) status = 'bear';
-    const shapes = indicators.series.slice(-3).map((bar) => candleShape(bar, 'STOCK'));
-    const lastThree = indicators.series.slice(-3);
-    const volumeIncreasingDeclines = lastThree.length === 3
-      && lastThree.every((bar) => bar.close < bar.open)
-      && lastThree[0].volume < lastThree[1].volume
-      && lastThree[1].volume < lastThree[2].volume;
-    const risk = (indicators.volumeRatio >= 2.5 && shapes.at(-1)?.longUpper)
-      || volumeIncreasingDeclines
-      || indicators.change <= -0.02;
-    const effectiveStatus = status;
+    if (!quality.valid || indicators.series.length < 25) {
+      return { ...neutral, reason: `${quality.missing.join('、') || '大盘数据不足'}，仅跳过“大盘高位放量”检查` };
+    }
     const high60 = indicators.prior.length >= 60 ? Math.max(...indicators.prior.slice(-60).map((bar) => bar.high)) : NaN;
     const highVolume = Number.isFinite(high60) && indicators.current.close >= high60 * 0.98 && indicators.volumeConfirmed;
-    const positionCap = status === 'bull' ? 100 : status === 'sideways' ? 60 : 20;
-    const allowedModes = status === 'bull'
-      ? ['breakout', 'pullback', 'reversal', 'oversold']
-      : status === 'sideways'
-        ? ['breakout', 'pullback', 'reversal']
-        : ['oversold'];
-    const statusReason = status === 'bull'
-      ? '大盘多头：①②③④均可操作'
-      : status === 'bear'
-        ? '大盘空头：仅④超跌反弹可操作，总仓位≤20%'
-        : '大盘震荡：①②③可操作，总仓位≤60%';
     return {
-      status,
-      effectiveStatus,
-      risk,
+      status: 'neutral',
+      effectiveStatus: 'neutral',
+      risk: highVolume,
       highVolume,
-      slope,
-      ma20: indicators.ma20,
-      ma20Distance,
-      ma20NeutralBand,
       basis: 'daily_bars',
       asOf: indicators.current?.date || '',
-      positionCap,
-      allowedModes,
-      reason: risk ? `${statusReason}；同时触发大盘风险，禁止追高` : statusReason
+      reason: highVolume ? '大盘高位放量，触发禁止追高检查' : '大盘未触发高位放量'
     };
   }
 
-  function detectPatterns(indicators, marketData) {
+  function detectPatterns(indicators) {
     const current = indicators.current;
     const previous = indicators.prior.at(-1);
     const currentShape = candleShape(current, indicators.securityType);
     const previousShape = previous ? candleShape(previous, indicators.securityType) : null;
-    const klineDoubleTop = isKlineDoubleTop(indicators.series, indicators.securityType);
     const pairedPriceSetup = detectPairedPriceTop(indicators.series, indicators.securityType);
     const stagnant = indicators.volumeConfirmed
       && Math.abs(indicators.change) < 0.01
@@ -627,53 +526,16 @@
       && Math.abs(current.close - indicators.previousHigh20) / indicators.previousHigh20 < 0.03;
     const lastThree = indicators.series.slice(-3);
     const threeBigBull = lastThree.length === 3 && lastThree.every((bar) => candleShape(bar, indicators.securityType).bigBull);
-    const priorThree = indicators.prior.slice(-3);
-    const priorTwo = indicators.prior.slice(-2);
-    const priorStrongRun = priorTwo.length === 2
-      && priorTwo.every((bar) => candleShape(bar, indicators.securityType).bigBull);
-    const beforePrevious = indicators.prior.at(-2);
-    const previousLimitUp = Boolean(previous
-      && beforePrevious
-      && beforePrevious.close > 0
-      && previous.close / beforePrevious.close - 1 >= 0.095);
-    const postStrongRunContext = priorStrongRun || previousLimitUp;
-    const safeBody = Math.max(currentShape.body, current.close * 0.000001);
-    const gapSmallBullWithShadows = Boolean(previous
-      && postStrongRunContext
-      && current.open > previous.high
-      && currentShape.bullish
-      && !currentShape.doji
-      && currentShape.body / current.close < 0.015
-      && (currentShape.upper > safeBody * 1.5 || currentShape.lower > safeBody * 1.5));
-    const tinyBodyLongUpperAfterRun = postStrongRunContext
-      && currentShape.bullish
-      && !currentShape.doji
-      && currentShape.longUpper
-      && currentShape.body / current.close < 0.012;
-    const tapeSource = marketData.intraday_signals || marketData.quote?.intraday_signals || marketData.quote?.tape_signals || {};
-    const tapeWarnings = {
-      violentOscillation: tapeSource.violent_oscillation === true || tapeSource.violentOscillation === true,
-      fakeStrength: tapeSource.fake_strength === true || tapeSource.fakeStrength === true || tapeSource.failed_limit_up === true,
-      abnormalOrders: tapeSource.abnormal_orders === true || tapeSource.abnormalOrders === true || tapeSource.tractor_orders === true
-    };
     return {
       currentShape,
       previousShape,
       bullishEngulfing: isBullishEngulfing(previous, current),
       morningStar: isMorningStar(indicators.series, indicators.securityType),
-      klineDoubleTop,
       pairedPriceTop: pairedPriceSetup.active,
       pairedPriceSetup,
       stagnant,
       threeBigBull,
-      previousBigBull: Boolean(previousShape?.bigBull),
-      priorStrongRun,
-      previousLimitUp,
-      postStrongRunContext,
-      gapSmallBullWithShadows,
-      tinyBodyLongUpperAfterRun,
-      tapeWarnings,
-      premiumRate: finiteNumber(marketData.quote?.premium_rate)
+      previousBigBull: Boolean(previousShape?.bigBull)
     };
   }
 
@@ -682,7 +544,6 @@
     if (indicators.series.length < 22) return none;
     const previous = indicators.series.at(-2);
     const before = indicators.series.at(-3);
-    const previousMa5 = movingAverage(indicators.series, 5, 1);
     const previousMa10 = movingAverage(indicators.series, 10, 1);
     const previousMa20 = movingAverage(indicators.series, 20, 1);
     const volumePeriod = 5;
@@ -697,55 +558,6 @@
     const shape = candleShape(previous, indicators.securityType);
     const confirmed = previousRatio <= 0.8 && Boolean(support) && (shape.hammer || isBullishEngulfing(before, previous));
     return confirmed ? { confirmed: true, support } : none;
-  }
-
-  function isMa5CloseHeld(indicators, current, shrink, confirmed) {
-    const ma5 = indicators?.ma5;
-    if (!confirmed || !shrink || !indicators?.bullishAlignment || !Number.isFinite(ma5) || ma5 <= 0 || !current) return false;
-    return current.close >= ma5
-      && current.close <= ma5 * 1.03
-      && current.low <= ma5 * 1.015
-      && current.low >= ma5 * 0.96;
-  }
-
-  function detectPreBreakoutStrength(indicators) {
-    const bars = indicators?.series;
-    const current = indicators?.current;
-    if (!Array.isArray(bars) || bars.length < 25 || !current || indicators.prior.length < 10) return false;
-    if (!(current.close > indicators.ma5
-      && indicators.bullishAlignment
-      && current.close > current.open
-      && current.close > indicators.prior.at(-1).close
-      && indicators.volumeRatio >= 1.2
-      && current.high <= indicators.previousHigh20)) return false;
-
-    const consolidation = indicators.prior.slice(-5);
-    const earlier = indicators.prior.slice(-10, -5);
-    let nearMa5Days = 0;
-    let heldMa10 = true;
-    consolidation.forEach((bar, index) => {
-      const offset = consolidation.length - index;
-      const dayMa5 = movingAverage(bars, 5, offset);
-      const dayMa10 = movingAverage(bars, 10, offset);
-      const nearMa5 = Number.isFinite(dayMa5)
-        && Math.abs(bar.close - dayMa5) / dayMa5 <= 0.03
-        && bar.low <= dayMa5 * 1.02
-        && bar.high >= dayMa5 * 0.98;
-      if (nearMa5) nearMa5Days += 1;
-      if (!Number.isFinite(dayMa10) || bar.close < dayMa10 * 0.99) heldMa10 = false;
-    });
-    const consolidationVolumes = consolidation.map((bar) => bar.volume);
-    const earlierVolumes = earlier.map((bar) => bar.volume);
-    const consolidationAverageVolume = average(consolidationVolumes);
-    const earlierAverageVolume = average(earlierVolumes);
-    const consolidationHigh = Math.max(...consolidation.map((bar) => bar.high));
-    const consolidationLow = Math.min(...consolidation.map((bar) => bar.low));
-    const compactRange = consolidationLow > 0 && consolidationHigh / consolidationLow - 1 <= 0.08;
-    const volumeContracted = !Number.isFinite(earlierAverageVolume)
-      || earlierAverageVolume <= 0
-      || consolidationAverageVolume <= earlierAverageVolume * 1.05;
-    const bodyStrength = current.open > 0 && (current.close - current.open) / current.open >= 0.005;
-    return nearMa5Days >= 3 && heldMa10 && compactRange && volumeContracted && bodyStrength;
   }
 
   function detectDAdd(indicators) {
@@ -763,28 +575,6 @@
     return hadBreak && didNotMakeNewLow;
   }
 
-  function detectContinuedDeclineAfterBreak(indicators) {
-    const bars = indicators.series;
-    if (bars.length < 25) return false;
-    const recent = bars.slice(-4);
-    for (let breakIndex = 1; breakIndex <= 2; breakIndex += 1) {
-      const before = recent[breakIndex - 1];
-      const afterBreak = recent.slice(breakIndex);
-      if (afterBreak.length < 2) continue;
-      const beforeOffset = recent.length - breakIndex;
-      const breakOffset = recent.length - 1 - breakIndex;
-      const beforeMa5 = movingAverage(bars, 5, beforeOffset);
-      const breakMa5 = movingAverage(bars, 5, breakOffset);
-      const crossedBelow = Number.isFinite(beforeMa5)
-        && Number.isFinite(breakMa5)
-        && before.close >= beforeMa5
-        && afterBreak[0].close < breakMa5;
-      const lowerLows = afterBreak.slice(1).every((bar, index) => bar.low < afterBreak[index].low * 0.998);
-      if (crossedBelow && lowerLows) return true;
-    }
-    return false;
-  }
-
   function resolveSignals(signals) {
     const sorted = [...signals].sort((left, right) => right.priority - left.priority);
     const primary = sorted[0] || makeSignal('hold', 'default_hold', '纪律判断', '未触发加仓、减仓或离场条件');
@@ -797,27 +587,36 @@
     const quality = validateMarketData(marketData, indicators);
     if (!quality.valid) {
       const primary = makeSignal('unavailable', 'data_quality', '数据不可用', quality.missing.join('、'), { confirmed: false, scope: 'data' });
-      return { dataStatus: 'unavailable', quality, indicators, patterns: null, market: context.market || null, blocked: true, primary, secondary: [], signals: [primary] };
+      return {
+        dataStatus: 'unavailable',
+        quality,
+        indicators,
+        patterns: null,
+        market: context.market || null,
+        blocked: true,
+        primary,
+        secondary: [],
+        signals: [primary]
+      };
     }
 
-    const patterns = detectPatterns(indicators, marketData);
+    const patterns = detectPatterns(indicators);
     const signals = [];
+    const addCandidates = [];
     const current = indicators.current;
+    const previous = indicators.prior.at(-1);
     const volumeRatio = indicators.volumeRatio;
-    const entryVolumeRatio = volumeRatio;
-    const expandedVolume = Number.isFinite(entryVolumeRatio) && entryVolumeRatio >= 1.3;
-    const volume = expandedVolume;
+    const expandedVolume = Number.isFinite(volumeRatio) && volumeRatio >= 1.3;
+    const breakoutVolume = expandedVolume && volumeRatio <= 1.8;
     const shrink = Number.isFinite(volumeRatio) && volumeRatio <= 0.8;
-    const flatVolume = Number.isFinite(volumeRatio) && volumeRatio > 0.8 && volumeRatio < 1.3;
-    const hugeVolume = entryVolumeRatio >= 2.5;
-    const rising = indicators.change > 0.001;
-    const falling = indicators.change < -0.001;
-    const isConfirmed = !isTradingSession(marketData.source_time);
-    const shapeExitEligible = !patterns.currentShape.doji;
-    const market = context.market || { status: 'unknown', effectiveStatus: 'unknown', risk: false, positionCap: 0, allowedModes: [], reason: '大盘数据不可用，暂停新增仓位' };
+    const hugeVolume = Number.isFinite(volumeRatio) && volumeRatio >= 2.5;
+    const rising = indicators.change > 0;
+    const falling = indicators.change < 0;
     const belowMa5 = current.close < indicators.ma5;
     const belowMa10 = current.close < indicators.ma10;
     const belowMa20 = current.close < indicators.ma20;
+    const shapeExitEligible = !patterns.currentShape.doji;
+    const market = context.market || null;
     const keySupport = finiteNumber(
       context.keySupport
       ?? context.breakoutSupport
@@ -828,175 +627,251 @@
     );
     const structureBroken = Number.isFinite(keySupport) && keySupport > 0 && current.close < keySupport;
 
-    if (indicators.deathCross && volume) {
-      if (isConfirmed) {
-        signals.push(makeSignal('clear', 'death_cross_volume', '趋势反转·清仓剩余仓位', `MA5下穿MA10形成死叉，量比${volumeRatio.toFixed(2)}达到放量标准，按第五层纪律清仓`, { priority: EXIT_PRIORITIES.trendReversal }));
-      } else {
-        signals.push(makeSignal('warning', 'death_cross_volume_wait_close', '死叉放量·等待收盘确认', `盘中MA5下穿MA10且量比${volumeRatio.toFixed(2)}，收盘确认后执行清仓`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
-      }
-    }
-
-    if (falling && volume && structureBroken) {
-      if (isConfirmed) {
-        signals.push(makeSignal('reduce_30_50', 'volume_break_key_support', '结构破坏·继续减仓', `放量下跌并跌破关键支撑${keySupport.toFixed(indicators.priceDigits)}，按第四层纪律继续减仓`, { priority: EXIT_PRIORITIES.structureBreak, details: { keySupport } }));
-      } else {
-        signals.push(makeSignal('warning', 'volume_break_key_support_wait_close', '跌破关键支撑·等待收盘确认', `盘中放量跌破关键支撑${keySupport.toFixed(indicators.priceDigits)}，收盘确认后继续减仓`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning, details: { keySupport } }));
-      }
-    }
-
-    if (falling && volume && belowMa20) {
-      if (isConfirmed) {
-        signals.push(makeSignal('reduce_30_50', 'volume_break_ma20', '趋势破坏·减仓30%-50%', `放量下跌且收盘跌破MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}`, { priority: EXIT_PRIORITIES.ma20Break }));
-      } else {
-        signals.push(makeSignal('warning', 'volume_break_ma20_wait_close', '放量跌破MA20·等待收盘确认', `盘中放量下跌并跌破MA20，量比${volumeRatio.toFixed(2)}；收盘确认后减仓30%-50%`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
-      }
-    } else if (falling && volume && belowMa5) {
-      if (isConfirmed) {
-        signals.push(makeSignal('reduce_30', 'volume_break_ma5', '动能减弱·减仓30%', `放量下跌且收盘跌破MA5 ${indicators.ma5.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}，按止损纪律减仓30%`, { priority: EXIT_PRIORITIES.ma5Break }));
-      } else {
-        signals.push(makeSignal('warning', 'volume_break_ma5_wait_close', '放量跌破MA5·等待收盘确认', `盘中跌破MA5且量比${volumeRatio.toFixed(2)}，等待收盘确认是否未收回`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
-      }
-    } else if (falling && volume && belowMa10) {
-      signals.push(makeSignal('warning', 'volume_break_ma10_observe', '趋势转弱·放量跌破MA10观察', `放量下跌并跌破MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}；按纪律进入风险观察，不直接减仓`, { confirmed: isConfirmed, priority: EXIT_PRIORITIES.trendWarning }));
-    } else if (falling && shrink && belowMa20) {
-      signals.push(makeSignal('hold_no_sell', 'shrink_break_ma20_observe', '缩量跌破MA20·先观察', `下跌缩量，量比${volumeRatio.toFixed(2)}；缩量跌破MA20不直接减仓，先观察支撑是否收回`, { priority: EXIT_PRIORITIES.shrinkObserve }));
-    } else if (falling && shrink && belowMa10) {
-      signals.push(makeSignal('hold_no_sell', 'shrink_break_ma10_observe', '缩量跌破MA10·暂不动作', `下跌缩量，量比${volumeRatio.toFixed(2)}；按第二层纪律暂不动作`, { priority: EXIT_PRIORITIES.shrinkObserve }));
-    } else if (falling && shrink && belowMa5) {
-      signals.push(makeSignal('hold_no_sell', 'shrink_break_ma5_observe', '缩量跌破MA5·观察不卖', `下跌缩量，量比${volumeRatio.toFixed(2)}；按第一层纪律仅作观察，不卖`, { priority: EXIT_PRIORITIES.shrinkObserve }));
-    } else if (falling && flatVolume && belowMa5) {
-      signals.push(makeSignal('warning', 'flat_break_ma5_observe', '平量跌破MA5·观察确认', `当前量比${volumeRatio.toFixed(2)}属于平量，跌破MA5但尚未满足放量减仓条件`, { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
-    }
-    const pairedPrice = patterns.pairedPriceSetup;
-    if (pairedPrice.active && pairedPrice.confirmed) {
-      const volumeReason = pairedPrice.historicalVolumeHigh
-        ? '对子日成交量创可用历史新高'
-        : `对子日成交量达到前5日均量的${pairedPrice.volumeRatio.toFixed(2)}倍`;
-      signals.push(makeSignal('exit_60_70', 'paired_price_top_confirmed', '历史新高价格对子顶·出60%-70%', `明显上涨后最高价${pairedPrice.price.toFixed(indicators.priceDigits)}形成价格对子并严格创可用历史新高，伴随放量长上影；${volumeReason}`, { confirmed: true, priority: EXIT_PRIORITIES.pairedTop }));
-    }
-    if (shapeExitEligible && patterns.klineDoubleTop && volume) {
-      signals.push(makeSignal('exit_60_70', 'kline_double_top_confirmed', '历史新高K线双顶·出60%-70%', `K线双顶的第二个峰严格创可用历史新高，量比${volumeRatio.toFixed(2)}达到放量标准`, { confirmed: isConfirmed, priority: EXIT_PRIORITIES.klineDoubleTop }));
-    }
     if (shapeExitEligible && patterns.currentShape.extremeUpper) {
-      if (isConfirmed) {
-        signals.push(makeSignal('clear', 'extreme_upper_shadow', '极端长上影线·立即清仓', '上影线超过实体3倍且超过收盘价3%，按K线纪律立即清仓', { priority: EXIT_PRIORITIES.extremeUpper }));
-      } else {
-        signals.push(makeSignal('warning', 'extreme_upper_shadow_wait_close', '极端长上影线·等待收盘确认', '盘中出现极端长上影，收盘形态确认后执行清仓纪律', { confirmed: false, priority: EXIT_PRIORITIES.trendWarning }));
-      }
+      signals.push(makeSignal(
+        'clear',
+        'extreme_upper_shadow',
+        '极端长上影线·立即清仓',
+        '出现极端长上影线，按K线与形态纪律立即清仓',
+        { priority: EXIT_PRIORITIES.extremeUpper }
+      ));
     }
-    const postStrongRunPattern = patterns.gapSmallBullWithShadows || patterns.tinyBodyLongUpperAfterRun;
-    if (shapeExitEligible && postStrongRunPattern && volume) {
-      signals.push(makeSignal('reduce_50_60', 'post_strong_run_kline_volume', '长上影线伴随放量·减仓50%-60%', '连续大阳线/涨停线后出现长上影警示K线，并伴随放量', { confirmed: isConfirmed, priority: EXIT_PRIORITIES.warningPatternVolume }));
-    }
-    if (shapeExitEligible && volume && patterns.currentShape.longUpper && !patterns.currentShape.extremeUpper && !postStrongRunPattern) {
-      signals.push(makeSignal('reduce_partial', 'volume_long_upper_shadow', '放量长上影·减仓信号', '放量长上影显示资金兑现，按纪律触发减仓信号', { confirmed: isConfirmed, priority: 720 }));
-    }
-    if (rising && volume) signals.push(makeSignal('hold', 'volume_price_up_volume', '趋势确认·放量上涨', `量比${volumeRatio.toFixed(2)}达到放量标准；放量上涨不触发离场，突破关键位时再进入加仓判断`, { priority: VOLUME_PRICE_PRIORITIES.risingVolume }));
-    if (rising && shrink) signals.push(makeSignal('hold', 'volume_price_up_shrink', '趋势完整·上涨缩量', '趋势线完整，上涨缩量可持有但不追高', { priority: VOLUME_PRICE_PRIORITIES.risingShrink }));
-    if (falling && shrink) signals.push(makeSignal('hold_no_sell', 'volume_price_down_shrink', '回踩观察·下跌缩量', '下跌缩量属于正常回踩，继续判断MA5/MA10/MA20支撑是否收回', { priority: VOLUME_PRICE_PRIORITIES.fallingShrink }));
-    if (patterns.stagnant) signals.push(makeSignal('warning', 'volume_stagnation', '量价警示·放量滞涨', '量比≥1.3、涨幅不足1%且接近前高，警惕高位换手', { priority: VOLUME_PRICE_PRIORITIES.stagnation }));
 
-    const stockDeviationLimit = indicators.securityType === 'ETF' ? 0.12 : 0.10;
-    const sectorWeak = indicators.securityType === 'STOCK' && indicators.change > 0.02 && finiteNumber(context.sectorChange) < 0;
-    const chaseReasons = [
-      patterns.threeBigBull && '连续3根大阳线',
-      indicators.deviationMa20 > stockDeviationLimit && `距离MA20超过${stockDeviationLimit * 100}%`,
-      hugeVolume && patterns.currentShape.longUpper && '放巨量长上影线',
-      sectorWeak && '个股涨但板块弱',
-      market.highVolume && '大盘高位放量'
-    ].filter(Boolean);
-    const chaseBlocked = chaseReasons.length > 0;
+    const pairedTop = patterns.pairedPriceTop;
+    if (pairedTop) {
+      signals.push(makeSignal(
+        'exit_60_70',
+        'paired_top_volume',
+        '对子顶伴随放量·出60%-70%',
+        `对子顶信号伴随放量，量比${volumeRatio.toFixed(2)}，按纪律出60%-70%`,
+        { priority: EXIT_PRIORITIES.pairedTop }
+      ));
+    }
 
+    if (shapeExitEligible && expandedVolume && patterns.previousBigBull && patterns.currentShape.longUpper) {
+      signals.push(makeSignal(
+        'reduce_50_60',
+        'long_upper_after_big_bull_volume',
+        '长上影线伴随放量·减仓50%-60%',
+        `大阳线后出现长上影线并伴随放量，量比${volumeRatio.toFixed(2)}`,
+        { priority: EXIT_PRIORITIES.warningPatternVolume }
+      ));
+    }
+
+    if (falling && expandedVolume && structureBroken) {
+      signals.push(makeSignal(
+        'reduce_30_50',
+        'volume_break_key_support',
+        '结构破坏·继续减仓',
+        `放量跌破前期突破平台或关键支撑${keySupport.toFixed(indicators.priceDigits)}，按纪律继续减仓`,
+        { priority: EXIT_PRIORITIES.structureBreak, details: { keySupport } }
+      ));
+    }
+
+    if (falling && expandedVolume && belowMa20) {
+      signals.push(makeSignal(
+        'reduce_30_50',
+        'volume_break_ma20',
+        '趋势破坏·减仓30%-50%',
+        `放量跌破MA20 ${indicators.ma20.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}`,
+        { priority: EXIT_PRIORITIES.ma20Break }
+      ));
+    }
+    else if (falling && expandedVolume && belowMa5) {
+      signals.push(makeSignal(
+        'reduce_30',
+        'volume_break_ma5',
+        '放量破MA5且未收回·减仓30%',
+        `当前价未收回MA5 ${indicators.ma5.toFixed(indicators.priceDigits)}，量比${volumeRatio.toFixed(2)}，按止损纪律减仓30%`,
+        { priority: EXIT_PRIORITIES.ma5Break }
+      ));
+    }
+    else if (falling && expandedVolume && belowMa10) {
+      signals.push(makeSignal(
+        'warning',
+        'volume_break_ma10_observe',
+        '趋势转弱·放量跌破MA10观察',
+        `放量跌破MA10 ${indicators.ma10.toFixed(indicators.priceDigits)}，按纪律观察`,
+        { priority: EXIT_PRIORITIES.trendWarning }
+      ));
+    }
+    else if (shrink && belowMa20) {
+      signals.push(makeSignal(
+        'hold_no_sell',
+        'shrink_break_ma20_observe',
+        '缩量跌破MA20·先观察',
+        `量比${volumeRatio.toFixed(2)}，缩量跌破MA20，按纪律先观察`,
+        { priority: EXIT_PRIORITIES.shrinkObserve }
+      ));
+    }
+    else if (shrink && belowMa10) {
+      signals.push(makeSignal(
+        'hold_no_sell',
+        'shrink_break_ma10_observe',
+        '缩量跌破MA10·暂不动作',
+        `量比${volumeRatio.toFixed(2)}，缩量跌破MA10，按纪律暂不动作`,
+        { priority: EXIT_PRIORITIES.shrinkObserve }
+      ));
+    }
+    else if (shrink && belowMa5) {
+      signals.push(makeSignal(
+        'hold_no_sell',
+        'shrink_break_ma5_observe',
+        '缩量破MA5·观察不卖',
+        `量比${volumeRatio.toFixed(2)}，缩量破MA5仅作观察，不卖`,
+        { priority: EXIT_PRIORITIES.shrinkObserve }
+      ));
+    }
+
+    if (expandedVolume && patterns.stagnant) {
+      signals.push(makeSignal(
+        'warning',
+        'volume_stagnation',
+        '放量滞涨·警惕高位换手',
+        `量比${volumeRatio.toFixed(2)}达到放量标准，但价格滞涨`,
+        { priority: VOLUME_PRICE_PRIORITIES.stagnation }
+      ));
+    }
     const supportLevels = [
-      { label: 'MA5', value: indicators.ma5 },
       { label: 'MA10', value: indicators.ma10 },
       { label: 'MA20', value: indicators.ma20 }
     ];
     const touchedSupport = supportLevels
       .map((support) => ({
         ...support,
-        distance: support.value > 0 ? Math.abs(current.low - support.value) / support.value : Infinity,
-        reclaimed: support.value > 0
-          && current.low <= support.value * 1.015
-          && current.low >= support.value * 0.94
+        distance: Math.abs(current.low - support.value) / support.value,
+        reclaimed: current.low <= support.value * 1.015
+          && current.low >= support.value * 0.95
           && current.close >= support.value
       }))
       .filter((support) => support.reclaimed)
       .sort((left, right) => left.distance - right.distance)[0];
-    const nearMa5 = touchedSupport?.label === 'MA5';
-    const nearMa10 = touchedSupport?.label === 'MA10';
-    const nearMa20 = touchedSupport?.label === 'MA20';
-    const candleRange = current.high - current.low;
-    const bullishSupportReclaim = Boolean(touchedSupport)
-      && current.close > current.open
-      && current.close >= touchedSupport.value
-      && candleRange > 0
-      && (current.close - current.low) / candleRange >= 0.55
-      && (current.close - current.open) / touchedSupport.value >= 0.005;
-    const supportTurnStrength = Boolean(touchedSupport)
-      && bullishSupportReclaim;
     const pullbackShape = patterns.currentShape.hammer || patterns.bullishEngulfing;
-    const pullbackWarning = shrink && (nearMa5 || nearMa10 || nearMa20) && !bullishSupportReclaim;
-    const supportRecovered = Boolean(touchedSupport)
+    const currentPullbackConfirmed = Boolean(touchedSupport)
       && shrink
-      && indicators.bullishAlignment
-      && supportTurnStrength
-      && (pullbackShape || bullishSupportReclaim);
-    const pullbackPrevious = indicators.prior.at(-1);
+      && pullbackShape
+      && current.close > current.open
+      && current.close > previous.close;
     const previousPullback = previousPullbackSetup(indicators);
     const previousPullbackConfirmed = previousPullback.confirmed
       && current.close > current.open
-      && current.close > pullbackPrevious.close;
-    const pullbackConfirmed = previousPullbackConfirmed || supportRecovered;
-    const trendBreakout = current.close > indicators.previousHigh20 && expandedVolume && indicators.bullishAlignment;
-    const previousHigh5 = indicators.prior.length >= 5
-      ? Math.max(...indicators.prior.slice(-5).map((bar) => bar.high))
-      : NaN;
-    const previousBar = indicators.prior.at(-1);
-    const volumeVsPrevious = previousBar?.volume > 0 ? current.volume / previousBar.volume : NaN;
-    const localBreakout = !trendBreakout
-      && Number.isFinite(previousHigh5)
-      && current.close > previousHigh5
-      && current.high > previousHigh5
-      && current.close > current.open
-      && indicators.bullishAlignment
-      && expandedVolume;
-    const reversal = patterns.morningStar
+      && current.close > previous.close;
+    const pullbackConfirmed = currentPullbackConfirmed || previousPullbackConfirmed;
+    const trendBreakout = Number.isFinite(indicators.previousHigh20)
       && current.close > indicators.previousHigh20
-      && entryVolumeRatio >= 1.3
-      && volumeVsPrevious > 1
+      && breakoutVolume
       && indicators.bullishAlignment;
-    const recentChanges = indicators.series.slice(-4).map((bar, index, sample) => index === 0 ? 0 : (sample[index - 1].close - bar.close) / sample[index - 1].close).slice(1);
-    const declineFading = recentChanges.length === 3 && recentChanges[0] > recentChanges[1] && recentChanges[1] > recentChanges[2] && recentChanges[2] > 0;
-    const oversoldBase = (indicators.rsi14 < 30 || indicators.deviationMa20 < -0.10) && declineFading;
-    const sectorStable = context.sectorStable === true;
+    const volumeVsPrevious = previous?.volume > 0 ? current.volume / previous.volume : NaN;
+    const reversal = patterns.morningStar
+      && Number.isFinite(indicators.previousHigh20)
+      && current.close > indicators.previousHigh20
+      && volumeVsPrevious > 1;
+    const recentLosses = indicators.series.slice(-4).map((bar, index, sample) => {
+      if (index === 0) return NaN;
+      return (sample[index - 1].close - bar.close) / sample[index - 1].close;
+    }).slice(1);
+    const declineFading = recentLosses.length === 3
+      && recentLosses.every((value) => value > 0)
+      && recentLosses[0] > recentLosses[1]
+      && recentLosses[1] > recentLosses[2];
+    const oversold = (indicators.rsi14 < 30 || indicators.deviationMa20 < -0.10)
+      && declineFading
+      && context.sectorStable === true;
     const dAdd = detectDAdd(indicators);
-    const addCandidates = [];
-    if (trendBreakout) addCandidates.push(makeSignal('add', 'entry_breakout', '①趋势突破·第1档建仓（30%-40%）', `突破20日新高并达到5日均量${entryVolumeRatio.toFixed(2)}倍，MA5>MA10>MA20，按纪律建立30%-40%底仓`, { scope: 'entry', priority: ENTRY_PRIORITIES.trendBreakout, details: { mode: 'breakout', entryMode: 'breakout', allocation: '30%-40%', rank: 2 } }));
-    if (pullbackConfirmed) {
-      const confirmedSupport = touchedSupport || previousPullback.support || supportLevels[0];
-      const pullbackReason = supportRecovered
-        ? `缩量回踩${touchedSupport.label}后收阳并回收支撑，按程序近似确认重新转强`
-        : `前一日缩量回踩${previousPullback.support.label}并出现锤子线或吞没形态，今日重新转强`;
-      addCandidates.push(makeSignal('add', 'entry_pullback_confirmed', '②回踩确认·第2档加仓（20%-30%）', `${pullbackReason}，按纪律加仓20%-30%`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackConfirmed, details: { mode: 'pullback', entryMode: 'pullback', allocation: '20%-30%', rank: 1, support: confirmedSupport.label } }));
-    }
-    else if (pullbackWarning) {
-      addCandidates.push(makeSignal('wait_add', 'entry_pullback_wait', '②回踩确认候选·等待重新转强', `缩量触及${touchedSupport.label}，等待收阳回收支撑或出现锤子线/吞没后再按第2档加仓20%-30%`, { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackWaiting, confirmed: false, details: { mode: 'pullback', entryMode: 'pullback', allocation: '20%-30%', rank: 1, support: touchedSupport.label } }));
-    }
-    if (localBreakout) addCandidates.push(makeSignal('add', 'entry_local_breakout', '放量突破前高·第3档加仓（10%-20%）', `放量上涨并突破近5日关键高点${previousHigh5.toFixed(indicators.priceDigits)}，多头排列保持，按纪律加仓10%-20%`, { scope: 'entry', priority: ENTRY_PRIORITIES.localBreakout, details: { mode: 'local_breakout', entryMode: 'reversal', allocation: '10%-20%', rank: 3 } }));
-    if (reversal) addCandidates.push(makeSignal('add', 'entry_reversal', '③反转形态·第3档加仓（10%-20%）', `早晨星后反弹突破前高，当日量为5日均量${entryVolumeRatio.toFixed(2)}倍且高于前日，按纪律加仓10%-20%`, { scope: 'entry', priority: ENTRY_PRIORITIES.reversal, details: { mode: 'reversal', entryMode: 'reversal', allocation: '10%-20%', rank: 3 } }));
-    if (oversoldBase) addCandidates.push(makeSignal(sectorStable ? 'add' : 'wait_add', 'entry_oversold', '④超跌反弹（≤20%小仓）', sectorStable ? '股价超跌、下跌衰减且板块企稳，仅建议≤20%小仓' : '超跌和下跌衰减成立，但板块企稳尚未确认，暂不加仓', { scope: 'entry', priority: ENTRY_PRIORITIES.oversold, confirmed: sectorStable, details: { mode: 'oversold', entryMode: 'oversold', allocation: '≤20%', rank: 4 } }));
-    if (dAdd) addCandidates.push(makeSignal('d_add', 'entry_d_add', '反弹补仓·D档加仓', '破位后2-3根K线不创新低且当前反弹收阳，用已减仓部分的30%-50%回补；止损设在反弹新低', { scope: 'entry', priority: ENTRY_PRIORITIES.dAdd, details: { mode: 'd_add', entryMode: 'pullback', allocation: '已减仓部分的30%-50%', stop: '反弹新低' } }));
 
+    if (pullbackConfirmed) {
+      const support = touchedSupport || previousPullback.support;
+      addCandidates.push(makeSignal(
+        'add',
+        'entry_pullback_confirmed',
+        '②回踩确认·第2档加仓（20%-30%）',
+        `缩量回踩${support.label}并出现锤子线或吞没形态，随后重新转强，按优先级最高的回踩纪律加仓20%-30%`,
+        { scope: 'entry', priority: ENTRY_PRIORITIES.pullbackConfirmed, details: { mode: 'pullback', allocation: '20%-30%' } }
+      ));
+    }
+    if (trendBreakout) {
+      addCandidates.push(makeSignal(
+        'add',
+        'entry_breakout',
+        '①趋势突破·第1档建仓（30%-40%）',
+        `突破20日新高，量比${volumeRatio.toFixed(2)}处于1.3～1.8倍，且MA5>MA10>MA20`,
+        { scope: 'entry', priority: ENTRY_PRIORITIES.trendBreakout, details: { mode: 'breakout', allocation: '30%-40%' } }
+      ));
+    }
+    if (reversal) {
+      addCandidates.push(makeSignal(
+        'add',
+        'entry_reversal',
+        '③反转形态·第3档加仓（10%-20%）',
+        '早晨星后反弹突破前高，并伴随成交量改善，按纪律加仓10%-20%',
+        { scope: 'entry', priority: ENTRY_PRIORITIES.reversal, details: { mode: 'reversal', allocation: '10%-20%' } }
+      ));
+    }
+    if (oversold) {
+      addCandidates.push(makeSignal(
+        'add',
+        'entry_oversold',
+        '④超跌反弹·仅≤20%小仓',
+        '股价超跌、下跌衰减且板块企稳，仅按纪律使用不超过20%的小仓位',
+        { scope: 'entry', priority: ENTRY_PRIORITIES.oversold, details: { mode: 'oversold', allocation: '≤20%' } }
+      ));
+    }
+    if (dAdd) {
+      addCandidates.push(makeSignal(
+        'd_add',
+        'entry_d_add',
+        '破位后不创新低·D档加仓',
+        '破位后2-3根K线不创新低，当前反弹收阳，按纪律执行D档反弹补仓',
+        { scope: 'entry', priority: ENTRY_PRIORITIES.dAdd, details: { mode: 'd_add' } }
+      ));
+    }
+    if (rising && expandedVolume) {
+      addCandidates.push(makeSignal(
+        'add',
+        'volume_price_up_volume',
+        '上涨放量·趋势确认可加仓',
+        `上涨伴随放量，量比${volumeRatio.toFixed(2)}，趋势确认后可按纪律加仓`,
+        { scope: 'entry', priority: 420, details: { mode: 'volume_confirmation' } }
+      ));
+    }
+
+    if (rising && shrink) {
+      signals.push(makeSignal('hold', 'volume_price_up_shrink', '上涨缩量·持有不追高', `量比${volumeRatio.toFixed(2)}，上涨缩量可持有但不追高`, { priority: VOLUME_PRICE_PRIORITIES.risingShrink }));
+    }
+    if (falling && shrink) {
+      signals.push(makeSignal('hold_no_sell', 'volume_price_down_shrink', '下跌缩量·正常回踩', `量比${volumeRatio.toFixed(2)}，下跌缩量按纪律观察支撑`, { priority: VOLUME_PRICE_PRIORITIES.fallingShrink }));
+    }
+
+    const sectorWeak = indicators.securityType === 'STOCK'
+      && indicators.change > 0
+      && finiteNumber(context.sectorChange) < 0;
+    const chaseReasons = [
+      patterns.threeBigBull && '连续3根大阳线',
+      indicators.deviationMa20 > 0.10 && '股价距离MA20超过10%',
+      hugeVolume && patterns.currentShape.longUpper && '放巨量长上影线',
+      sectorWeak && '个股涨但板块弱',
+      market?.highVolume && '大盘高位放量'
+    ].filter(Boolean);
+    const chaseBlocked = chaseReasons.length > 0;
     const riskBlocksAdding = signals.some((signal) => signal.priority >= ACTIONS.warning.priority);
     addCandidates.forEach((candidate) => {
-      const supportReclaim = candidate.details.mode === 'pullback' || candidate.details.mode === 'd_add';
-      if (riskBlocksAdding || (chaseBlocked && !supportReclaim)) return;
+      if (riskBlocksAdding) return;
+      if (chaseBlocked && candidate.action !== 'd_add') return;
       signals.push(candidate);
     });
-    if (chaseBlocked) signals.push(makeSignal('hold', 'no_chase', '持有观望·禁止追高', `${chaseReasons.join('；')}，已有仓位可持有，但禁止新增仓位`, { scope: 'entry', priority: 110 }));
+    if (chaseBlocked) {
+      signals.push(makeSignal(
+        'hold',
+        'no_chase',
+        '禁止追高·持有观望',
+        `${chaseReasons.join('；')}，已有仓位可持有，但禁止追高`,
+        { scope: 'entry', priority: 110 }
+      ));
+    }
 
-    if (signals.length === 0) signals.push(makeSignal('hold', 'default_hold', '纪律判断', '未触发加仓、减仓或离场条件，按纪律持有观察'));
+    if (signals.length === 0) {
+      signals.push(makeSignal('hold', 'default_hold', '纪律判断', '未触发加仓、减仓或离场条件，按纪律持有观察'));
+    }
     const resolved = resolveSignals(signals);
     return {
       dataStatus: 'ok',
@@ -1041,8 +916,7 @@
       previousHigh20: round(indicators.previousHigh20),
       previousLow20: round(indicators.previousLow20),
       deviationMa20: round(indicators.deviationMa20, 4),
-      bullishAlignment: indicators.bullishAlignment,
-      deathCross: indicators.deathCross
+      bullishAlignment: indicators.bullishAlignment
     };
   }
 
@@ -1067,11 +941,8 @@
     candleShape,
     isBullishEngulfing,
     isMorningStar,
-    isMa5CloseHeld,
-    detectPreBreakoutStrength,
     isPairedPriceTop,
     detectPairedPriceTop,
-    isKlineDoubleTop,
     volumeLevel,
     calculateIndicators,
     validateMarketData,
