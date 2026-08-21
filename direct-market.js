@@ -561,20 +561,76 @@
     return historyClose > 0 && previousClose > 0 && Math.abs(historyClose - previousClose) / Math.max(historyClose, previousClose) <= tolerance;
   }
 
+  function adjustedHistoryCanAlign(history) {
+    return ['qfq', 'forward'].includes(String(history?.adjustment || '').toLowerCase());
+  }
+
+  function historiesSharePriceBasis(left, right, quoteTime, tolerance = 0.005) {
+    const leftClose = finite(historyPreviousClose(left, quoteTime));
+    const rightClose = finite(historyPreviousClose(right, quoteTime));
+    return leftClose > 0 && rightClose > 0
+      && Math.abs(leftClose - rightClose) / Math.max(leftClose, rightClose) <= tolerance;
+  }
+
+  function alignAdjustedHistoryToQuote(history, quoteRecord, maxDifference = 0.2) {
+    if (!adjustedHistoryCanAlign(history)) return null;
+    const historyClose = finite(historyPreviousClose(history, quoteRecord?.source_time));
+    const previousClose = finite(quoteRecord?.quote?.previous_close);
+    if (!(historyClose > 0 && previousClose > 0)) return null;
+    const difference = Math.abs(historyClose - previousClose) / Math.max(historyClose, previousClose);
+    if (difference <= 0.005 || difference > maxDifference) return null;
+    const ratio = previousClose / historyClose;
+    const bars = (history.bars || []).map((bar) => ({
+      ...bar,
+      open: bar.open * ratio,
+      close: bar.close * ratio,
+      high: bar.high * ratio,
+      low: bar.low * ratio
+    }));
+    if (!bars.length || !bars.every(validBar)) return null;
+    return {
+      ...history,
+      bars,
+      alignment: 'quote_previous_close',
+      alignment_ratio: ratio,
+      alignment_from_previous_close: historyClose,
+      alignment_to_previous_close: previousClose
+    };
+  }
+
   async function fetchBestHistory(symbol, quoteRecord, options = {}) {
     const fuyaoKey = String(options.fuyaoApiKey || '').trim();
     const providers = fuyaoKey
       ? [['fuyao', (value) => fetchFuyaoHistory(value, { ...options, securityType: quoteRecord.security_type })], ['tencent', fetchTencentHistory], ['eastmoney', fetchEastmoneyHistory]]
       : [['tencent', fetchTencentHistory], ['eastmoney', fetchEastmoneyHistory]];
     const errors = [];
+    const candidates = [];
     for (const [provider, operation] of providers) {
       try {
         const value = await operation(symbol);
         if (historyMatchesQuote(value, quoteRecord)) return { value, fallback: provider !== 'tencent', errors };
+        candidates.push({ provider, value });
         const historyClose = historyPreviousClose(value, quoteRecord.source_time);
         errors.push({ provider, message: `历史昨收${finite(historyClose).toFixed(4)}与实时昨收${finite(quoteRecord.quote?.previous_close).toFixed(4)}不一致` });
       } catch (error) {
         errors.push({ provider, message: error?.message || '历史K线失败' });
+      }
+    }
+    for (const candidate of candidates) {
+      const verifier = candidates.find((item) => (
+        item !== candidate
+        && adjustedHistoryCanAlign(item.value)
+        && historiesSharePriceBasis(candidate.value, item.value, quoteRecord.source_time)
+      ));
+      if (!verifier) continue;
+      const aligned = alignAdjustedHistoryToQuote(candidate.value, quoteRecord);
+      if (aligned && historyMatchesQuote(aligned, quoteRecord)) {
+        return {
+          value: aligned,
+          fallback: candidate.provider !== 'tencent',
+          errors,
+          alignment_verified_by: verifier.provider
+        };
       }
     }
     throw Object.assign(new Error('两路历史K线均不可用或口径冲突'), { errors });
@@ -653,6 +709,9 @@
         verification_source: quoteResult.verification_source,
         history_source: historyResult.value.source,
         history_adjustment: historyResult.value.adjustment || 'unknown',
+        history_alignment: historyResult.value.alignment || null,
+        history_alignment_ratio: finite(historyResult.value.alignment_ratio, null),
+        history_alignment_verified_by: historyResult.alignment_verified_by || null,
         daily_bars: historyResult.value.bars,
         data_quality: {
           valid: true,
@@ -735,7 +794,11 @@
     priceDifference,
     historyPreviousClose,
     historyMatchesQuote,
+    adjustedHistoryCanAlign,
+    historiesSharePriceBasis,
+    alignAdjustedHistoryToQuote,
     fetchInstrument,
     fetchState
   };
 });
+
